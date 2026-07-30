@@ -18,6 +18,7 @@ class PlanStep extends Model
         'estimated_days',
         'due_date',
         'completed_at',
+        'video_url',
     ];
 
     protected function casts(): array

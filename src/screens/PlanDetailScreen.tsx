@@ -1,8 +1,15 @@
 import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Image, Linking, StyleSheet, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPlan, setStepComplete } from '../api/plans';
 import type { Plan, PlanStep } from '../types/plan';
+
+// Derives a YouTube thumbnail image URL from a watch/share link.
+function getYouTubeThumbnail(url: string): string | null {
+  const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
+}
 
 export function PlanDetailScreen({ route }: any) {
   const { planId } = route.params;
@@ -58,6 +65,8 @@ export function PlanDetailScreen({ route }: any) {
 
   const renderStep = ({ item }: { item: PlanStep }) => {
     const completed = Boolean(item.completed_at);
+    const thumbnailUrl = item.video_url ? getYouTubeThumbnail(item.video_url) : null;
+
     return (
       <TouchableOpacity
         style={styles.stepRow}
@@ -70,6 +79,20 @@ export function PlanDetailScreen({ route }: any) {
           <Text style={[styles.stepTitle, completed && styles.stepTitleDone]}>{item.title}</Text>
           <Text style={styles.stepDescription}>{item.description}</Text>
           {item.due_date && <Text style={styles.stepDueDate}>Due {item.due_date}</Text>}
+
+          {thumbnailUrl && (
+            <TouchableOpacity
+              style={styles.videoThumbnail}
+              onPress={() => Linking.openURL(item.video_url!)}
+              activeOpacity={0.85}
+            >
+              <Image source={{ uri: thumbnailUrl }} style={styles.videoImage} />
+              <View style={styles.videoPlayOverlay}>
+                <Ionicons name="play-circle" size={40} color="#ffffff" />
+              </View>
+              <Text style={styles.videoLabel}>Watch video</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -119,4 +142,25 @@ const styles = StyleSheet.create({
   stepTitleDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
   stepDescription: { fontSize: 14, color: '#6B7280', marginTop: 4 },
   stepDueDate: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
+  videoThumbnail: {
+    marginTop: 12,
+    width: 220,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  videoImage: { width: '100%', height: 124, backgroundColor: '#E5E7EB' },
+  videoPlayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 124,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  videoLabel: { fontSize: 12, fontWeight: '600', color: '#374151', paddingVertical: 8, paddingHorizontal: 10 },
 });

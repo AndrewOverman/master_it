@@ -20,6 +20,7 @@ class PlanStepResource extends JsonResource
             'estimated_days' => $this->estimated_days,
             'due_date' => $this->due_date?->format('Y-m-d'),
             'completed_at' => $this->completed_at?->toISOString(),
+            'video_url' => $this->video_url,
         ];
     }
 }

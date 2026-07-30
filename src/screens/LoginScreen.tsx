@@ -25,7 +25,7 @@ export function LoginScreen({ navigation }: any) {
       mode === 'login' ? login({ email, password }) : register({ name, email, password }),
     onSuccess: async (data) => {
       await SecureStore.setItemAsync('auth_token', data.token);
-      navigation.replace('NewPlan');
+      navigation.replace('Main');
     },
     onError: () => {
       Alert.alert(

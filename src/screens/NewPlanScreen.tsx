@@ -32,6 +32,8 @@ export function NewPlanScreen({ navigation }: any) {
   const [prompt, setPrompt] = useState('');
   const [skillLevel, setSkillLevel] = useState<SkillLevel>('beginner');
   const [timeCommitment, setTimeCommitment] = useState<TimeCommitment>('moderate');
+  const [weeks, setWeeks] = useState('');
+  const [days, setDays] = useState('');
 
   const mutation = useMutation({
     mutationFn: createPlan,
@@ -39,8 +41,10 @@ export function NewPlanScreen({ navigation }: any) {
       // Navigate to the generating screen with the new plan's id
       navigation.navigate('Generating', { planId: data.id });
     },
-    onError: () => {
-      Alert.alert('Something went wrong', 'Could not start generating your plan. Please try again.');
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ?? 'Could not start generating your plan. Please try again.';
+      Alert.alert('Something went wrong', message);
     },
   });
 
@@ -49,10 +53,18 @@ export function NewPlanScreen({ navigation }: any) {
       Alert.alert('Tell us a bit more', 'Describe what you want to learn in a sentence or two.');
       return;
     }
+
+    const targetDays = (parseInt(weeks, 10) || 0) * 7 + (parseInt(days, 10) || 0);
+    if (targetDays > 365) {
+      Alert.alert('That\'s a long plan', 'Plans can span up to 365 days.');
+      return;
+    }
+
     mutation.mutate({
       prompt: prompt.trim(),
       skill_level: skillLevel,
       time_commitment: timeCommitment,
+      ...(targetDays > 0 ? { target_days: targetDays } : {}),
     });
   };
 
@@ -121,6 +133,37 @@ export function NewPlanScreen({ navigation }: any) {
         ))}
       </View>
 
+      <Text style={styles.sectionLabel}>How long should this plan take?</Text>
+      <View style={styles.durationRow}>
+        <View style={styles.durationField}>
+          <TextInput
+            style={styles.durationInput}
+            placeholder="0"
+            placeholderTextColor="#9CA3AF"
+            value={weeks}
+            onChangeText={(text) => setWeeks(text.replace(/[^0-9]/g, ''))}
+            keyboardType="number-pad"
+            maxLength={3}
+            editable={!mutation.isPending}
+          />
+          <Text style={styles.durationUnit}>weeks</Text>
+        </View>
+        <View style={styles.durationField}>
+          <TextInput
+            style={styles.durationInput}
+            placeholder="0"
+            placeholderTextColor="#9CA3AF"
+            value={days}
+            onChangeText={(text) => setDays(text.replace(/[^0-9]/g, ''))}
+            keyboardType="number-pad"
+            maxLength={2}
+            editable={!mutation.isPending}
+          />
+          <Text style={styles.durationUnit}>days</Text>
+        </View>
+      </View>
+      <Text style={styles.durationHint}>Leave blank for a default ~30-day plan.</Text>
+
       <TouchableOpacity
         style={[styles.submitButton, mutation.isPending && styles.submitButtonDisabled]}
         onPress={handleSubmit}
@@ -165,6 +208,21 @@ const styles = StyleSheet.create({
   optionChipSelected: { backgroundColor: '#111827', borderColor: '#111827' },
   optionChipText: { fontSize: 14, color: '#374151' },
   optionChipTextSelected: { color: '#fff', fontWeight: '600' },
+  durationRow: { flexDirection: 'row', gap: 16, justifyContent: 'center' },
+  durationField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  durationInput: {
+    width: 64,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#111827',
+    textAlign: 'center',
+  },
+  durationUnit: { fontSize: 14, color: '#374151' },
+  durationHint: { fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 24 },
   submitButton: {
     backgroundColor: '#111827',
     borderRadius: 12,

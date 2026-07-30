@@ -11,6 +11,7 @@ export interface PlanStep {
   estimated_days: number | null;
   due_date: string | null; // ISO date string, null if not scheduled
   completed_at: string | null; // ISO datetime string, null if not done
+  video_url: string | null; // YouTube link, not every step has one
 }
 
 export interface Plan {

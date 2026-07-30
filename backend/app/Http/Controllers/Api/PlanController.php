@@ -19,6 +19,17 @@ class PlanController extends Controller
 
     public function store(Request $request)
     {
+        $user = $request->user();
+
+        // Plan generation calls a paid LLM API, so cap how many plans a user
+        // can burn credits creating. Per-user so limits can be raised
+        // individually (e.g. for internal testing) without a code change.
+        if ($user->plans()->count() >= $user->max_plans) {
+            return response()->json([
+                'message' => 'You\'ve reached the limit of '.$user->max_plans.' plans for this account.',
+            ], 429);
+        }
+
         $validated = $request->validate([
             'prompt' => ['required', 'string', 'min:5'],
             'skill_level' => ['nullable', 'in:beginner,intermediate,advanced'],
@@ -26,7 +37,7 @@ class PlanController extends Controller
             'target_days' => ['nullable', 'integer', 'min:1', 'max:365'],
         ]);
 
-        $plan = $request->user()->plans()->create([
+        $plan = $user->plans()->create([
             'title' => str($validated['prompt'])->limit(60),
             'original_prompt' => $validated['prompt'],
             'status' => 'generating',
