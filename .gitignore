@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+*.pem
+.env
+.env.local
+
+/backend/vendor/
+/backend/node_modules/
+/backend/.env
+/backend/storage/*.key
+/backend/database/database.sqlite

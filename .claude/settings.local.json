@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -v)",
+      "Bash(composer -V)",
+      "Bash(npm -v)",
+      "Bash(curl -sI https://packagist.org --max-time 5)",
+      "Bash(git --version)",
+      "Bash(diskutil info *)",
+      "Bash(mdls -name kMDItemFSHasCustomIcon -name kMDItemPath /Users/andrewoverman/Development/master_it)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(composer create-project *)",
+      "Bash(php artisan *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:8123/up)",
+      "Bash(sleep 2 && cat /tmp/laravel_serve.log)",
+      "Bash(curl -s http://127.0.0.1:8123/api/v1/plans/1 -H 'Accept: application/json' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s http://127.0.0.1:8123/api/v1/plans -H \"Accept: application/json\")",
+      "Bash(php -r 'echo json_encode\\(json_decode\\(file_get_contents\\(\"php://stdin\"\\)\\), JSON_PRETTY_PRINT\\);')",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\\\\n\" http://127.0.0.1:8123/api/v1/plans)",
+      "Bash(php -m)",
+      "Bash(host db.pegzxckbhaterrukhbzu.supabase.co)",
+      "Bash(dig +short AAAA db.pegzxckbhaterrukhbzu.supabase.co)",
+      "Bash(dig +short A db.pegzxckbhaterrukhbzu.supabase.co)",
+      "Bash(php -r ' *)",
+      "Bash(dig +short A aws-0-us-east-2.pooler.supabase.com)",
+      "Bash(kill 28003)",
+      "Bash(echo \"RN typecheck exit: $?\")",
+      "Bash(git -C /Users/andrewoverman/Development/master_it init)",
+      "Bash(git config *)",
+      "Bash(git count-objects *)",
+      "Bash(git fsck *)",
+      "Bash(git add *)",
+      "Bash(grep -iE \"\\\\.env$|\\\\.env\\\\.|secret|credential|\\\\.pem$|\\\\.key$\")"
+    ]
+  }
+}
