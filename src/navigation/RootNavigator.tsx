@@ -1,12 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { LoginScreen } from '../screens/LoginScreen';
 import { NewPlanScreen } from '../screens/NewPlanScreen';
 import { GeneratingScreen } from '../screens/GeneratingScreen';
 import { PlanDetailScreen } from '../screens/PlanDetailScreen';
 
 export type RootStackParamList = {
+  Login: undefined;
   NewPlan: undefined;
   Generating: { planId: number };
   PlanDetail: { planId: number };
@@ -31,9 +34,32 @@ function PlanFailedScreen({ route, navigation }: any) {
 }
 
 export function RootNavigator() {
+  // Check for a stored auth token before deciding whether to land on
+  // the login screen or go straight into the app.
+  const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+
+  useEffect(() => {
+    SecureStore.getItemAsync('auth_token').then((token) => {
+      setInitialRoute(token ? 'NewPlan' : 'Login');
+    });
+  }, []);
+
+  if (!initialRoute) {
+    return (
+      <View style={styles.bootContainer}>
+        <ActivityIndicator size="large" color="#111827" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: true }}>
+      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: true }}>
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen
           name="NewPlan"
           component={NewPlanScreen}
@@ -60,6 +86,7 @@ export function RootNavigator() {
 }
 
 const styles = StyleSheet.create({
+  bootContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   failedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   failedTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
   failedMessage: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20 },
