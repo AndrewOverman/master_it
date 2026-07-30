@@ -16,12 +16,19 @@ class PlanStepController extends Controller
         abort_unless($step->plan_id === $plan->id, 404);
 
         $validated = $request->validate([
-            'completed' => ['required', 'boolean'],
+            'completed' => ['sometimes', 'required', 'boolean'],
+            'due_date' => ['sometimes', 'nullable', 'date'],
         ]);
 
-        $step->update([
-            'completed_at' => $validated['completed'] ? now() : null,
-        ]);
+        $updates = [];
+        if (array_key_exists('completed', $validated)) {
+            $updates['completed_at'] = $validated['completed'] ? now() : null;
+        }
+        if (array_key_exists('due_date', $validated)) {
+            $updates['due_date'] = $validated['due_date'];
+        }
+
+        $step->update($updates);
 
         return new PlanStepResource($step);
     }
