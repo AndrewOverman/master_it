@@ -1,5 +1,11 @@
 import { apiClient } from './client';
-import type { Plan, PlanStep, CreatePlanRequest, CreatePlanResponse } from '../types/plan';
+import type {
+  Plan,
+  PlanStep,
+  CreatePlanRequest,
+  CreatePlanResponse,
+  PaginatedResponse,
+} from '../types/plan';
 
 // POST /api/v1/plans
 // Kicks off generation. Backend queues a job and returns immediately.
@@ -34,5 +40,22 @@ export async function setStepComplete(
 // List all of the user's plans, for a home/history screen later
 export async function listPlans(): Promise<Plan[]> {
   const { data } = await apiClient.get<Plan[]>('/api/v1/plans');
+  return data;
+}
+
+// GET /api/v1/plans/featured?page=N
+// Admin-curated plans (is_featured flag), paginated for endless scroll
+export async function listFeaturedPlans(page: number): Promise<PaginatedResponse<Plan>> {
+  const { data } = await apiClient.get<PaginatedResponse<Plan>>('/api/v1/plans/featured', {
+    params: { page },
+  });
+  return data;
+}
+
+// POST /api/v1/plans/{planId}/copy
+// Clones a featured plan (and its steps) into the caller's own plans.
+// Already generated, so it comes back ready immediately — no polling.
+export async function copyPlan(planId: number): Promise<Plan> {
+  const { data } = await apiClient.post<Plan>(`/api/v1/plans/${planId}/copy`);
   return data;
 }

@@ -60,4 +60,60 @@ class PlanController extends Controller
 
         return new PlanResource($plan->load('steps'));
     }
+
+    public function featured(Request $request)
+    {
+        $plans = Plan::with('steps')
+            ->where('is_featured', true)
+            ->where('status', 'ready') // never showcase a generating/failed plan
+            ->latest()
+            ->paginate(10);
+
+        return PlanResource::collection($plans);
+    }
+
+    public function copy(Request $request, Plan $plan)
+    {
+        // Deliberately not an ownership check — this plan usually belongs
+        // to someone else. Copying is authorized by the plan being
+        // featured and finished generating, not by who owns it.
+        abort_unless($plan->is_featured && $plan->status === 'ready', 404);
+
+        $user = $request->user();
+
+        if ($user->plans()->count() >= $user->max_plans) {
+            return response()->json([
+                'message' => 'You\'ve reached the limit of '.$user->max_plans.' plans for this account.',
+            ], 429);
+        }
+
+        $copy = $user->plans()->create([
+            'title' => $plan->title,
+            'emoji' => $plan->emoji,
+            'original_prompt' => $plan->original_prompt,
+            'status' => 'ready',
+            'skill_level' => $plan->skill_level,
+            'time_commitment' => $plan->time_commitment,
+            'target_days' => $plan->target_days,
+        ]);
+
+        // Mirrors GeneratePlanSteps::handle()'s cumulative-due-date logic,
+        // anchored on now() instead of the source plan's original
+        // created_at so the copy's due dates land in the future.
+        $cumulativeDays = 0;
+        foreach ($plan->steps as $step) {
+            $cumulativeDays += $step->estimated_days ?? 0;
+
+            $copy->steps()->create([
+                'order' => $step->order,
+                'title' => $step->title,
+                'description' => $step->description,
+                'estimated_days' => $step->estimated_days,
+                'due_date' => now()->copy()->addDays($cumulativeDays),
+                'video_url' => $step->video_url,
+            ]);
+        }
+
+        return new PlanResource($copy->load('steps'));
+    }
 }

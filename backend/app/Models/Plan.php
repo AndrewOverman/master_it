@@ -14,6 +14,7 @@ class Plan extends Model
     protected $fillable = [
         'user_id',
         'title',
+        'emoji',
         'original_prompt',
         'status',
         'error_message',

@@ -181,7 +181,7 @@ export function NewPlanScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 20, paddingTop: 40 },
+  content: { padding: 20, paddingTop: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
   heading: { fontSize: 26, fontWeight: '700', color: '#111827' },
   subheading: { fontSize: 15, color: '#6B7280', marginTop: 6, marginBottom: 24 },
   promptInput: {

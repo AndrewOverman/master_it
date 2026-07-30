@@ -112,13 +112,17 @@ class GeneratePlanSteps implements ShouldQueue
 
         ## Output format
 
-        Call the create_plan_steps tool with 4-7 sequential steps. Each step
-        needs:
-        - title: a short, specific action (not a topic or phase name)
-        - description: 1-2 sentences explaining exactly what to do, specific to
-          the actual goal
-        - estimated_days: how many days this step should reasonably take at the
-          stated time commitment
+        Call the create_plan_steps tool with:
+        - emoji: a single emoji that visually represents this specific goal
+          (e.g. a guitar for learning guitar, a wrench for fixing a faucet, a
+          running shoe for training for a race). Pick something concrete and
+          recognizable, not a generic "sparkles" or "checklist" emoji.
+        - steps: 4-7 sequential steps. Each step needs:
+          - title: a short, specific action (not a topic or phase name)
+          - description: 1-2 sentences explaining exactly what to do, specific
+            to the actual goal
+          - estimated_days: how many days this step should reasonably take at
+            the stated time commitment
 
         The estimated_days across all steps should sum to approximately the
         requested total plan length.
@@ -130,7 +134,7 @@ class GeneratePlanSteps implements ShouldQueue
 
     public function handle(): void
     {
-        $steps = $this->generateStepsFromClaude();
+        ['emoji' => $emoji, 'steps' => $steps] = $this->generatePlanFromClaude();
 
         $cumulativeDays = 0;
 
@@ -147,13 +151,13 @@ class GeneratePlanSteps implements ShouldQueue
             ]);
         }
 
-        $this->plan->update(['status' => 'ready']);
+        $this->plan->update(['status' => 'ready', 'emoji' => $emoji]);
     }
 
     /**
-     * @return array<int, array{title: string, description: string, estimated_days: int}>
+     * @return array{emoji: ?string, steps: array<int, array{title: string, description: string, estimated_days: int}>}
      */
-    private function generateStepsFromClaude(): array
+    private function generatePlanFromClaude(): array
     {
         $apiKey = config('services.anthropic.api_key');
 
@@ -183,10 +187,14 @@ class GeneratePlanSteps implements ShouldQueue
                 ],
                 'tools' => [[
                     'name' => 'create_plan_steps',
-                    'description' => 'Return a structured, ordered list of steps for a personalized goal plan.',
+                    'description' => 'Return an emoji and a structured, ordered list of steps for a personalized goal plan.',
                     'input_schema' => [
                         'type' => 'object',
                         'properties' => [
+                            'emoji' => [
+                                'type' => 'string',
+                                'description' => 'A single emoji visually representing this specific goal.',
+                            ],
                             'steps' => [
                                 'type' => 'array',
                                 'minItems' => 3,
@@ -202,7 +210,7 @@ class GeneratePlanSteps implements ShouldQueue
                                 ],
                             ],
                         ],
-                        'required' => ['steps'],
+                        'required' => ['emoji', 'steps'],
                     ],
                 ]],
                 'tool_choice' => ['type' => 'tool', 'name' => 'create_plan_steps'],
@@ -227,6 +235,7 @@ class GeneratePlanSteps implements ShouldQueue
 
         $toolUse = collect($response->json('content'))->firstWhere('type', 'tool_use');
         $steps = $toolUse['input']['steps'] ?? null;
+        $emoji = $toolUse['input']['emoji'] ?? null;
 
         // Claude occasionally returns nested tool input fields as a
         // JSON-encoded string instead of a native array; decode defensively.
@@ -238,7 +247,7 @@ class GeneratePlanSteps implements ShouldQueue
             throw new RuntimeException('Anthropic response did not include any usable steps.');
         }
 
-        return $steps;
+        return ['emoji' => is_string($emoji) ? $emoji : null, 'steps' => $steps];
     }
 
     private function buildPrompt(): string

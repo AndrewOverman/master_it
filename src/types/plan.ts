@@ -17,11 +17,24 @@ export interface PlanStep {
 export interface Plan {
   id: number;
   title: string;
+  emoji: string | null; // set once the plan finishes generating
   original_prompt: string;
   status: PlanStatus;
   error_message: string | null; // populated if status === 'failed'
+  skill_level: 'beginner' | 'intermediate' | 'advanced' | null;
+  time_commitment: 'light' | 'moderate' | 'intensive' | null;
+  target_days: number | null;
   created_at: string;
   steps: PlanStep[];
+}
+
+// Shape of a Laravel paginated resource collection response
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    current_page: number;
+    last_page: number;
+  };
 }
 
 // Request body for POST /api/v1/plans

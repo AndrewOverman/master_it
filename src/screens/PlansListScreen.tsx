@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { listPlans } from '../api/plans';
 import type { Plan } from '../types/plan';
@@ -36,12 +37,21 @@ export function PlansListScreen({ navigation }: any) {
       style={styles.planRow}
       onPress={() => navigation.navigate('PlanDetail', { planId: item.id })}
     >
-      <Text style={styles.planTitle}>{item.title}</Text>
-      <Text style={styles.planMeta}>
-        {item.status === 'ready'
-          ? `${item.steps.filter((s) => s.completed_at).length}/${item.steps.length} steps complete`
-          : item.status}
-      </Text>
+      <View style={styles.planImage}>
+        {item.emoji ? (
+          <Text style={styles.planEmoji}>{item.emoji}</Text>
+        ) : (
+          <Ionicons name="image-outline" size={22} color="#9CA3AF" />
+        )}
+      </View>
+      <View style={styles.planText}>
+        <Text style={styles.planTitle}>{item.title}</Text>
+        <Text style={styles.planMeta}>
+          {item.status === 'ready'
+            ? `${item.steps.filter((s) => s.completed_at).length}/${item.steps.length} steps complete`
+            : item.status}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -62,10 +72,23 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, color: '#6B7280', textAlign: 'center' },
   list: { padding: 20, flexGrow: 1 },
   planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  planImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  planEmoji: { fontSize: 24 },
+  planText: { flex: 1 },
   planTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
   planMeta: { fontSize: 13, color: '#6B7280', marginTop: 4, textTransform: 'capitalize' },
 });

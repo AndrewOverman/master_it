@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { NavigationContainer, DrawerActions, useNavigation } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackHeaderProps,
+} from '@react-navigation/native-stack';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -16,8 +19,10 @@ import { NewPlanScreen } from '../screens/NewPlanScreen';
 import { GeneratingScreen } from '../screens/GeneratingScreen';
 import { PlanDetailScreen } from '../screens/PlanDetailScreen';
 import { PlansListScreen } from '../screens/PlansListScreen';
+import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
 
 export type AppStackParamList = {
+  Featured: undefined;
   NewPlan: undefined;
   Generating: { planId: number };
   PlanDetail: { planId: number };
@@ -49,22 +54,51 @@ function PlanFailedScreen({ route, navigation }: any) {
   );
 }
 
-function HamburgerButton() {
+// Native headers on iOS can't be resized via style props (they're a real
+// UINavigationBar), so this replaces the header entirely to get a taller
+// bar and a bigger hamburger icon. Screens can still override the left
+// slot the normal way via `options.headerLeft` (e.g. GeneratingScreen
+// hides it during generation).
+function AppHeader({ options }: NativeStackHeaderProps) {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
   return (
-    <TouchableOpacity
-      onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-      style={styles.hamburgerButton}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    <View
+      style={[
+        styles.header,
+        { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right },
+      ]}
     >
-      <Text style={styles.hamburgerIcon}>☰</Text>
-    </TouchableOpacity>
+      <View style={styles.headerContent}>
+        <View style={styles.headerSlot}>
+          {options.headerLeft ? (
+            options.headerLeft({ canGoBack: navigation.canGoBack() })
+          ) : (
+            <TouchableOpacity
+              onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Text style={styles.hamburgerIcon}>☰</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {options.title}
+        </Text>
+        <View style={styles.headerSlot} />
+      </View>
+    </View>
   );
 }
 
 function AppStackNavigator() {
   return (
-    <AppStack.Navigator screenOptions={{ headerShown: true, headerLeft: () => <HamburgerButton /> }}>
+    <AppStack.Navigator
+      initialRouteName="Featured"
+      screenOptions={{ headerShown: true, header: (props) => <AppHeader {...props} /> }}
+    >
+      <AppStack.Screen name="Featured" component={FeaturedPlansScreen} options={{ title: 'Featured Plans' }} />
       <AppStack.Screen name="NewPlan" component={NewPlanScreen} options={{ title: 'New Plan' }} />
       <AppStack.Screen
         name="Generating"
@@ -89,6 +123,34 @@ function DrawerContent(props: DrawerContentComponentProps) {
       <View style={styles.drawerDivider} />
 
       <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
+        <DrawerItem
+          label="Featured"
+          labelStyle={styles.drawerItemLabel}
+          icon={({ size, color }) => <Ionicons name="sparkles-outline" size={size} color={color} />}
+          activeTintColor="#111827"
+          inactiveTintColor="#374151"
+          activeBackgroundColor="#F3F4F6"
+          pressColor="#F3F4F6"
+          style={styles.drawerItem}
+          onPress={() => {
+            props.navigation.navigate('App', { screen: 'Featured' });
+            props.navigation.dispatch(DrawerActions.closeDrawer());
+          }}
+        />
+        <DrawerItem
+          label="New Plan"
+          labelStyle={styles.drawerItemLabel}
+          icon={({ size, color }) => <Ionicons name="add-circle-outline" size={size} color={color} />}
+          activeTintColor="#111827"
+          inactiveTintColor="#374151"
+          activeBackgroundColor="#F3F4F6"
+          pressColor="#F3F4F6"
+          style={styles.drawerItem}
+          onPress={() => {
+            props.navigation.navigate('App', { screen: 'NewPlan' });
+            props.navigation.dispatch(DrawerActions.closeDrawer());
+          }}
+        />
         <DrawerItem
           label="Plans"
           labelStyle={styles.drawerItemLabel}
@@ -129,9 +191,12 @@ export function RootNavigator() {
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
 
   useEffect(() => {
-    SecureStore.getItemAsync('auth_token').then((token) => {
-      setInitialRoute(token ? 'Main' : 'Login');
-    });
+    // expo-secure-store has no web implementation (getItemAsync rejects
+    // there), so a missing .catch() left web permanently stuck on this
+    // boot spinner. Treat "can't read a token" the same as "no token."
+    SecureStore.getItemAsync('auth_token')
+      .then((token) => setInitialRoute(token ? 'Main' : 'Login'))
+      .catch(() => setInitialRoute('Login'));
   }, []);
 
   if (!initialRoute) {
@@ -158,8 +223,16 @@ const styles = StyleSheet.create({
   failedTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
   failedMessage: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20 },
   retryLink: { fontSize: 15, color: '#2563EB', fontWeight: '600' },
-  hamburgerButton: { paddingHorizontal: 12, paddingVertical: 6 },
-  hamburgerIcon: { fontSize: 20, color: '#111827' },
+  header: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  headerContent: {
+    height: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  headerSlot: { width: 60, alignItems: 'flex-start', justifyContent: 'center' },
+  hamburgerIcon: { fontSize: 30, color: '#111827' },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 19, fontWeight: '700', color: '#111827' },
   drawer: { width: 280 },
   drawerContainer: { flex: 1, backgroundColor: '#fff' },
   drawerHeader: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
