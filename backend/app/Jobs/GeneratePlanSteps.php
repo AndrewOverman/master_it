@@ -6,6 +6,7 @@ use App\Models\Plan;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
@@ -13,6 +14,11 @@ use Throwable;
  * Asks Claude to break the plan's original prompt into a concrete, ordered
  * set of steps (tailored to the goal, skill level, time commitment, and
  * target length), then persists them.
+ *
+ * The instructions + examples below are identical on every call, so they're
+ * sent as a cached `system` block (prompt caching) rather than folded into
+ * the per-plan user message. Only the actual goal/skill level/time
+ * commitment/target days varies per call.
  */
 class GeneratePlanSteps implements ShouldQueue
 {
@@ -22,6 +28,101 @@ class GeneratePlanSteps implements ShouldQueue
     // a generic, well-known talk on the mechanics of skill acquisition,
     // attached to the first step only so not every step has a video.
     private const PLACEHOLDER_VIDEO_URL = 'https://www.youtube.com/watch?v=5MgBikgcWnY';
+
+    private const SYSTEM_PROMPT = <<<'PROMPT'
+        You are an expert curriculum and project planner. Your job is to take
+        someone's stated goal and turn it into a concrete, sequential, achievable
+        plan of steps.
+
+        ## What makes a good plan step
+
+        - SPECIFIC to the actual goal, not generic advice that could apply to any
+          goal. "Learn the fundamentals" is bad; "Learn the difference between
+          bulk fermentation and proofing, and how each affects crumb texture" is
+          good.
+        - ACTIONABLE: a step should describe something the person can go and DO,
+          not just a topic to "understand" or "study."
+        - SEQUENTIAL: each step should build on the previous one. Early steps
+          establish fundamentals or gather materials/tools; middle steps practice
+          and build; later steps refine, test, and finish.
+        - SCOPED to the stated skill level and time commitment. A beginner with
+          15 minutes a day needs smaller, more numerous, more forgiving steps
+          than an advanced person with several hours a day.
+        - REALISTIC on time: estimated_days per step should reflect genuine
+          effort at the stated time commitment, not an arbitrary round number.
+        - Named for the activity, not the phase. Never use generic phase labels
+          like "Learn the fundamentals," "Practice the basics," or "Put it to
+          the test" — always describe the actual, concrete activity implied by
+          the goal.
+
+        ## Examples of good breakdowns
+
+        ### Example 1
+        Goal: "I want to learn to play basic chords on guitar" (beginner, moderate
+        time commitment, ~21 days)
+        Steps:
+        1. "Learn proper hand position and how to read chord diagrams" (3 days) —
+           Get comfortable holding the guitar, fretting with your fingertips, and
+           reading a chord chart before trying to play anything.
+        2. "Master the open chords: E, A, D, G, C" (7 days) — Practice switching
+           cleanly between these five chords one at a time until each rings out
+           clearly with no buzzing.
+        3. "Practice chord transitions in a simple progression" (5 days) — Drill
+           a common progression like G-C-D-G slowly, then bring it up to tempo
+           with a metronome.
+        4. "Learn basic strumming patterns" (3 days) — Add simple down-up
+           strumming patterns on top of the chords you've learned.
+        5. "Play one full song from start to finish" (3 days) — Pick a simple
+           song using only the chords you've practiced and play it start to
+           finish without stopping.
+
+        ### Example 2
+        Goal: "I want to train for a 5K run" (beginner, light time commitment,
+        ~30 days)
+        Steps:
+        1. "Establish a walk-run baseline" (5 days) — Alternate 1 minute of
+           jogging with 2 minutes of walking for 20 minutes, to build initial
+           cardiovascular tolerance without injury.
+        2. "Increase jogging intervals" (7 days) — Extend jogging intervals to
+           3-4 minutes with 1-2 minute walk breaks.
+        3. "Build continuous running distance" (10 days) — Work up to jogging
+           continuously for 20 minutes without a walk break.
+        4. "Practice race pace and distance" (5 days) — Run the full 5K distance
+           (3.1 miles) at an easy, sustainable pace at least twice.
+        5. "Taper and prepare for race day" (3 days) — Reduce training volume,
+           rest, and do a short easy shakeout run before race day.
+
+        ### Example 3
+        Goal: "I want to build and launch a personal portfolio website"
+        (intermediate, moderate time commitment, ~14 days)
+        Steps:
+        1. "Sketch the site structure and content" (2 days) — List every page
+           and section you need (home, projects, about, contact) and what goes
+           on each, before writing any code.
+        2. "Build the static layout and navigation" (3 days) — Implement the
+           page structure and navigation with placeholder content so the site's
+           skeleton is click-through-able.
+        3. "Add real content and project write-ups" (4 days) — Replace
+           placeholders with your actual bio, project descriptions, and images.
+        4. "Style the site and make it responsive" (3 days) — Apply a consistent
+           visual design and test it at mobile, tablet, and desktop widths.
+        5. "Deploy and do a final cross-browser check" (2 days) — Push the site
+           to hosting, then verify links, forms, and layout in at least two
+           different browsers.
+
+        ## Output format
+
+        Call the create_plan_steps tool with 4-7 sequential steps. Each step
+        needs:
+        - title: a short, specific action (not a topic or phase name)
+        - description: 1-2 sentences explaining exactly what to do, specific to
+          the actual goal
+        - estimated_days: how many days this step should reasonably take at the
+          stated time commitment
+
+        The estimated_days across all steps should sum to approximately the
+        requested total plan length.
+        PROMPT;
 
     public function __construct(
         public Plan $plan,
@@ -69,6 +170,17 @@ class GeneratePlanSteps implements ShouldQueue
             ->post('https://api.anthropic.com/v1/messages', [
                 'model' => config('services.anthropic.model'),
                 'max_tokens' => 2048,
+                // Identical on every call: cached as one block with the
+                // tools definition that precedes it (render order is
+                // tools -> system -> messages; a breakpoint on the last
+                // system block caches both).
+                'system' => [
+                    [
+                        'type' => 'text',
+                        'text' => self::SYSTEM_PROMPT,
+                        'cache_control' => ['type' => 'ephemeral'],
+                    ],
+                ],
                 'tools' => [[
                     'name' => 'create_plan_steps',
                     'description' => 'Return a structured, ordered list of steps for a personalized goal plan.',
@@ -94,6 +206,8 @@ class GeneratePlanSteps implements ShouldQueue
                     ],
                 ]],
                 'tool_choice' => ['type' => 'tool', 'name' => 'create_plan_steps'],
+                // Only the per-plan specifics — short, and different every
+                // call, so it's never worth caching.
                 'messages' => [
                     ['role' => 'user', 'content' => $this->buildPrompt()],
                 ],
@@ -102,6 +216,14 @@ class GeneratePlanSteps implements ShouldQueue
         if ($response->failed()) {
             throw new RuntimeException('Anthropic API request failed: '.$response->body());
         }
+
+        $usage = $response->json('usage', []);
+        Log::info('GeneratePlanSteps: Anthropic prompt cache usage', [
+            'plan_id' => $this->plan->id,
+            'cache_creation_input_tokens' => $usage['cache_creation_input_tokens'] ?? null,
+            'cache_read_input_tokens' => $usage['cache_read_input_tokens'] ?? null,
+            'input_tokens' => $usage['input_tokens'] ?? null,
+        ]);
 
         $toolUse = collect($response->json('content'))->firstWhere('type', 'tool_use');
         $steps = $toolUse['input']['steps'] ?? null;
@@ -126,19 +248,10 @@ class GeneratePlanSteps implements ShouldQueue
         $timeCommitment = $this->plan->time_commitment ?? 'unspecified';
 
         return <<<PROMPT
-            Create a personalized, step-by-step plan to help someone achieve this goal:
-            "{$this->plan->original_prompt}"
-
-            Details about them:
-            - Skill level: {$skillLevel}
-            - Time they can commit: {$timeCommitment}
-            - The plan should span approximately {$totalDays} days in total
-
-            Break this into 4-7 sequential steps that are concrete and specific to this
-            exact goal (not generic advice that could apply to any goal). Each step needs
-            a short title, a 1-2 sentence actionable description, and an estimated number
-            of days. The estimated_days across all steps should sum to approximately
-            {$totalDays}.
+            Goal: "{$this->plan->original_prompt}"
+            Skill level: {$skillLevel}
+            Time commitment: {$timeCommitment}
+            Target plan length: approximately {$totalDays} days total
             PROMPT;
     }
 
