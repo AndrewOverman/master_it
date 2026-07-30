@@ -20,6 +20,7 @@ export interface Plan {
   emoji: string | null; // set once the plan finishes generating
   original_prompt: string;
   status: PlanStatus;
+  completed_at: string | null; // ISO datetime string, set when the user manually marks the plan done
   error_message: string | null; // populated if status === 'failed'
   skill_level: 'beginner' | 'intermediate' | 'advanced' | null;
   time_commitment: 'light' | 'moderate' | 'intensive' | null;

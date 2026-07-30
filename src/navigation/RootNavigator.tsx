@@ -20,6 +20,8 @@ import { GeneratingScreen } from '../screens/GeneratingScreen';
 import { PlanDetailScreen } from '../screens/PlanDetailScreen';
 import { PlansListScreen } from '../screens/PlansListScreen';
 import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { AccountScreen } from '../screens/AccountScreen';
 
 export type AppStackParamList = {
   Featured: undefined;
@@ -28,6 +30,8 @@ export type AppStackParamList = {
   PlanDetail: { planId: number };
   PlanFailed: { planId: number; message: string | null };
   PlansList: undefined;
+  Settings: undefined;
+  Account: undefined;
 };
 
 export type RootStackParamList = {
@@ -108,6 +112,8 @@ function AppStackNavigator() {
       <AppStack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: 'Your Plan' }} />
       <AppStack.Screen name="PlanFailed" component={PlanFailedScreen} options={{ title: 'Plan Failed' }} />
       <AppStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'Your Plans' }} />
+      <AppStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <AppStack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
     </AppStack.Navigator>
   );
 }
@@ -122,7 +128,11 @@ function DrawerContent(props: DrawerContentComponentProps) {
 
       <View style={styles.drawerDivider} />
 
-      <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
+      <DrawerContentScrollView
+        {...props}
+        style={styles.drawerScroll}
+        contentContainerStyle={styles.drawerContent}
+      >
         <DrawerItem
           label="Featured"
           labelStyle={styles.drawerItemLabel}
@@ -166,6 +176,40 @@ function DrawerContent(props: DrawerContentComponentProps) {
           }}
         />
       </DrawerContentScrollView>
+
+      <SafeAreaView edges={['bottom']} style={styles.drawerFooter}>
+        <View style={styles.drawerDivider} />
+        <View style={styles.drawerFooterContent}>
+          <DrawerItem
+            label="Settings"
+            labelStyle={styles.drawerItemLabel}
+            icon={({ size, color }) => <Ionicons name="settings-outline" size={size} color={color} />}
+            activeTintColor="#111827"
+            inactiveTintColor="#374151"
+            activeBackgroundColor="#F3F4F6"
+            pressColor="#F3F4F6"
+            style={styles.drawerItem}
+            onPress={() => {
+              props.navigation.navigate('App', { screen: 'Settings' });
+              props.navigation.dispatch(DrawerActions.closeDrawer());
+            }}
+          />
+          <DrawerItem
+            label="Account"
+            labelStyle={styles.drawerItemLabel}
+            icon={({ size, color }) => <Ionicons name="person-circle-outline" size={size} color={color} />}
+            activeTintColor="#111827"
+            inactiveTintColor="#374151"
+            activeBackgroundColor="#F3F4F6"
+            pressColor="#F3F4F6"
+            style={styles.drawerItem}
+            onPress={() => {
+              props.navigation.navigate('App', { screen: 'Account' });
+              props.navigation.dispatch(DrawerActions.closeDrawer());
+            }}
+          />
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -239,7 +283,10 @@ const styles = StyleSheet.create({
   drawerTitle: { fontSize: 22, fontWeight: '700', color: '#111827' },
   drawerSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
   drawerDivider: { height: 1, backgroundColor: '#F3F4F6' },
+  drawerScroll: { flex: 1 },
   drawerContent: { paddingTop: 8, paddingHorizontal: 8 },
+  drawerFooter: { backgroundColor: '#fff' },
+  drawerFooterContent: { paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
   drawerItem: { borderRadius: 10 },
   drawerItemLabel: { fontSize: 15, fontWeight: '600' },
 });

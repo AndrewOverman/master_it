@@ -17,11 +17,19 @@ class Plan extends Model
         'emoji',
         'original_prompt',
         'status',
+        'completed_at',
         'error_message',
         'skill_level',
         'time_commitment',
         'target_days',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'completed_at' => 'datetime',
+        ];
+    }
 
     public function user(): BelongsTo
     {

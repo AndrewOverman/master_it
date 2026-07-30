@@ -36,6 +36,28 @@ export async function setStepComplete(
   return data;
 }
 
+// PATCH /api/v1/plans/{planId}/steps/{stepId}
+// Update a step's due date (YYYY-MM-DD).
+export async function setStepDueDate(
+  planId: number,
+  stepId: number,
+  dueDate: string
+): Promise<PlanStep> {
+  const { data } = await apiClient.patch(
+    `/api/v1/plans/${planId}/steps/${stepId}`,
+    { due_date: dueDate }
+  );
+  return data;
+}
+
+// PATCH /api/v1/plans/{planId}
+// Toggle a plan's completed state. Send the new desired state explicitly
+// rather than "toggle" server-side, so retries are safe (idempotent).
+export async function setPlanComplete(planId: number, completed: boolean): Promise<Plan> {
+  const { data } = await apiClient.patch<Plan>(`/api/v1/plans/${planId}`, { completed });
+  return data;
+}
+
 // GET /api/v1/plans
 // List all of the user's plans, for a home/history screen later
 export async function listPlans(): Promise<Plan[]> {

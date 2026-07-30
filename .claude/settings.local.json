@@ -66,7 +66,14 @@
       "Bash(rm -rf /Users/andrewoverman/.expo/ios-simulator-app-cache/Expo-Go-2.32.18.tar.app *)",
       "Bash(curl -s -o /dev/null -w \"backend alive: %{http_code}\\\\n\" http://127.0.0.1:8000/up)",
       "Bash(curl -s -X POST http://127.0.0.1:8000/api/v1/register -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"name\":\"Test User\",\"email\":\"test@example.com\",\"password\":\"password123\"}')",
-      "Bash(xargs -I{} sh -c 'echo \"--- {} ---\"; cat {}')"
+      "Bash(xargs -I{} sh -c 'echo \"--- {} ---\"; cat {}')",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; cat {}')",
+      "Bash(node -e \"const p=require\\('/Users/andrewoverman/Development/master_it/node_modules/react-native-gesture-handler/package.json'\\); console.log\\(p.version\\)\")",
+      "Bash(npm run *)",
+      "Bash(lsof -nP -iTCP:8090 -sTCP:LISTEN)",
+      "Bash(git check-ignore *)",
+      "Bash(lsof -i :8090 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:8091 -sTCP:LISTEN)"
     ]
   }
 }

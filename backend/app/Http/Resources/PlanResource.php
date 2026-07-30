@@ -18,6 +18,7 @@ class PlanResource extends JsonResource
             'emoji' => $this->emoji,
             'original_prompt' => $this->original_prompt,
             'status' => $this->status,
+            'completed_at' => $this->completed_at?->toISOString(),
             'error_message' => $this->error_message,
             'skill_level' => $this->skill_level,
             'time_commitment' => $this->time_commitment,

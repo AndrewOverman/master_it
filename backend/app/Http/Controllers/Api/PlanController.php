@@ -61,6 +61,21 @@ class PlanController extends Controller
         return new PlanResource($plan->load('steps'));
     }
 
+    public function update(Request $request, Plan $plan)
+    {
+        abort_unless($plan->user_id === $request->user()->id, 404);
+
+        $validated = $request->validate([
+            'completed' => ['required', 'boolean'],
+        ]);
+
+        $plan->update([
+            'completed_at' => $validated['completed'] ? now() : null,
+        ]);
+
+        return new PlanResource($plan);
+    }
+
     public function featured(Request $request)
     {
         $plans = Plan::with('steps')
