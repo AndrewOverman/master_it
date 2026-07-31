@@ -26,3 +26,26 @@ export async function register(payload: {
   const { data } = await apiClient.post<AuthResponse>('/api/v1/register', payload);
   return data;
 }
+
+// POST /api/v1/logout
+export async function logout(): Promise<void> {
+  await apiClient.post('/api/v1/logout');
+}
+
+// GET /api/v1/user
+export async function getCurrentUser(): Promise<AuthUser> {
+  const { data } = await apiClient.get<AuthUser>('/api/v1/user');
+  return data;
+}
+
+// PATCH /api/v1/user
+// current_password is only required when password is included.
+export async function updateProfile(payload: {
+  name?: string;
+  email?: string;
+  current_password?: string;
+  password?: string;
+}): Promise<AuthUser> {
+  const { data } = await apiClient.patch<AuthUser>('/api/v1/user', payload);
+  return data;
+}

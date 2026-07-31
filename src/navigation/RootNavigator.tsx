@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
 import { NavigationContainer, DrawerActions, useNavigation } from '@react-navigation/native';
 import {
   createNativeStackNavigator,
@@ -22,6 +21,7 @@ import { PlansListScreen } from '../screens/PlansListScreen';
 import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AccountScreen } from '../screens/AccountScreen';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 
 export type AppStackParamList = {
   Featured: undefined;
@@ -229,21 +229,14 @@ function MainNavigator() {
   );
 }
 
-export function RootNavigator() {
-  // Check for a stored auth token before deciding whether to land on
-  // the login screen or go straight into the app.
-  const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+// Conditionally rendering Login vs Main (rather than just picking an
+// initialRouteName once) is what lets signOut() — called from screens
+// deeply nested inside Main — swap the app back to Login just by
+// flipping isAuthenticated, with no manual navigation reset needed.
+function RootNavigatorContent() {
+  const { isAuthenticated } = useAuth();
 
-  useEffect(() => {
-    // expo-secure-store has no web implementation (getItemAsync rejects
-    // there), so a missing .catch() left web permanently stuck on this
-    // boot spinner. Treat "can't read a token" the same as "no token."
-    SecureStore.getItemAsync('auth_token')
-      .then((token) => setInitialRoute(token ? 'Main' : 'Login'))
-      .catch(() => setInitialRoute('Login'));
-  }, []);
-
-  if (!initialRoute) {
+  if (isAuthenticated === null) {
     return (
       <View style={styles.bootContainer}>
         <ActivityIndicator size="large" color="#111827" />
@@ -253,11 +246,22 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer>
-      <RootStack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="Login" component={LoginScreen} />
-        <RootStack.Screen name="Main" component={MainNavigator} />
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        {isAuthenticated ? (
+          <RootStack.Screen name="Main" component={MainNavigator} />
+        ) : (
+          <RootStack.Screen name="Login" component={LoginScreen} />
+        )}
       </RootStack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export function RootNavigator() {
+  return (
+    <AuthProvider>
+      <RootNavigatorContent />
+    </AuthProvider>
   );
 }
 

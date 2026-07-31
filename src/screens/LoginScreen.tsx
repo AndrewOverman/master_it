@@ -10,11 +10,12 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import { useMutation } from '@tanstack/react-query';
 import { login, register } from '../api/auth';
+import { useAuth } from '../context/AuthContext';
 
 export function LoginScreen({ navigation }: any) {
+  const { signIn } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -24,8 +25,9 @@ export function LoginScreen({ navigation }: any) {
     mutationFn: () =>
       mode === 'login' ? login({ email, password }) : register({ name, email, password }),
     onSuccess: async (data) => {
-      await SecureStore.setItemAsync('auth_token', data.token);
-      navigation.replace('Main');
+      // Flips isAuthenticated in RootNavigator, which swaps to Main —
+      // no explicit navigation call needed.
+      await signIn(data.token);
     },
     onError: () => {
       Alert.alert(

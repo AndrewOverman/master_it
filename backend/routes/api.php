@@ -3,7 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PlanController;
 use App\Http\Controllers\Api\PlanStepController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -13,9 +13,8 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
 
-        Route::get('user', function (Request $request) {
-            return $request->user();
-        });
+        Route::get('user', [UserController::class, 'show']);
+        Route::patch('user', [UserController::class, 'update']);
 
         Route::get('plans', [PlanController::class, 'index']);
         Route::post('plans', [PlanController::class, 'store']);
