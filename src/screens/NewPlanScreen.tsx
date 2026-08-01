@@ -133,7 +133,7 @@ export function NewPlanScreen({ navigation }: any) {
         ))}
       </View>
 
-      <Text style={styles.sectionLabel}>How long should this plan take?</Text>
+      <Text style={styles.sectionLabel}>Plan Duration?</Text>
       <View style={styles.durationRow}>
         <View style={styles.durationField}>
           <TextInput

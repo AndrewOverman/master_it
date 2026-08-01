@@ -3,6 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\Plan;
+use App\Services\YouTubeVideoSearchService;
+use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -24,10 +26,10 @@ class GeneratePlanSteps implements ShouldQueue
 {
     use Queueable;
 
-    // Placeholder until real per-topic video search/LLM integration exists:
-    // a generic, well-known talk on the mechanics of skill acquisition,
-    // attached to the first step only so not every step has a video.
-    private const PLACEHOLDER_VIDEO_URL = 'https://www.youtube.com/watch?v=5MgBikgcWnY';
+    // Not every step gets a video, and never more than this many per plan —
+    // videos are a supplement for steps that genuinely benefit from a visual
+    // demonstration, not a default for every step.
+    private const MAX_VIDEOS_PER_PLAN = 2;
 
     private const SYSTEM_PROMPT = <<<'PROMPT'
         You are an expert curriculum and project planner. Your job is to take
@@ -123,6 +125,13 @@ class GeneratePlanSteps implements ShouldQueue
             to the actual goal
           - estimated_days: how many days this step should reasonably take at
             the stated time commitment
+          - needs_video: true only if seeing the technique demonstrated would
+            genuinely help more than text would (a physical movement, hand
+            position, or visual process — e.g. a chord grip, a running form
+            cue, a knife technique). Mark true for at most 2 steps across the
+            whole plan — the ones where it helps most. false for the rest,
+            including any step that's just practice, research, planning, or
+            purely conceptual.
 
         The estimated_days across all steps should sum to approximately the
         requested total plan length.
@@ -136,10 +145,29 @@ class GeneratePlanSteps implements ShouldQueue
     {
         ['emoji' => $emoji, 'steps' => $steps] = $this->generatePlanFromClaude();
 
+        $videoService = app(YouTubeVideoSearchService::class);
+        $videosRemaining = self::MAX_VIDEOS_PER_PLAN;
+
+        if (! $videoService->isConfigured()) {
+            Log::info('GeneratePlanSteps: YOUTUBE_API_KEY not configured, skipping video attachment', [
+                'plan_id' => $this->plan->id,
+            ]);
+        }
+
         $cumulativeDays = 0;
 
         foreach ($steps as $index => $step) {
             $cumulativeDays += $step['estimated_days'];
+
+            $video = null;
+
+            if ($videosRemaining > 0 && ($step['needs_video'] ?? false)) {
+                $video = $this->findVideoForStep($videoService, $step);
+
+                if ($video) {
+                    $videosRemaining--;
+                }
+            }
 
             $this->plan->steps()->create([
                 'order' => $index + 1,
@@ -147,7 +175,11 @@ class GeneratePlanSteps implements ShouldQueue
                 'description' => $step['description'],
                 'estimated_days' => $step['estimated_days'],
                 'due_date' => $this->plan->created_at->copy()->addDays($cumulativeDays),
-                'video_url' => $index === 0 ? self::PLACEHOLDER_VIDEO_URL : null,
+                'video_url' => $video['url'] ?? null,
+                'video_title' => $video['title'] ?? null,
+                'video_channel' => $video['channel'] ?? null,
+                'video_view_count' => $video['view_count'] ?? null,
+                'video_published_at' => $video['published_at'] ?? null,
             ]);
         }
 
@@ -155,7 +187,30 @@ class GeneratePlanSteps implements ShouldQueue
     }
 
     /**
-     * @return array{emoji: ?string, steps: array<int, array{title: string, description: string, estimated_days: int}>}
+     * @param  array{title: string, description: string}  $step
+     * @return array{url: string, title: string, channel: string, view_count: int, published_at: Carbon}|null
+     */
+    private function findVideoForStep(YouTubeVideoSearchService $videoService, array $step): ?array
+    {
+        $query = "{$step['title']} {$this->plan->original_prompt} tutorial";
+
+        try {
+            return $videoService->search($query);
+        } catch (Throwable $e) {
+            // A video search failure is never worth failing the whole plan
+            // over — the step just ends up with no video.
+            Log::warning('GeneratePlanSteps: video search failed', [
+                'plan_id' => $this->plan->id,
+                'step_title' => $step['title'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @return array{emoji: ?string, steps: array<int, array{title: string, description: string, estimated_days: int, needs_video: bool}>}
      */
     private function generatePlanFromClaude(): array
     {
@@ -205,8 +260,9 @@ class GeneratePlanSteps implements ShouldQueue
                                         'title' => ['type' => 'string'],
                                         'description' => ['type' => 'string'],
                                         'estimated_days' => ['type' => 'integer', 'minimum' => 1],
+                                        'needs_video' => ['type' => 'boolean'],
                                     ],
-                                    'required' => ['title', 'description', 'estimated_days'],
+                                    'required' => ['title', 'description', 'estimated_days', 'needs_video'],
                                 ],
                             ],
                         ],

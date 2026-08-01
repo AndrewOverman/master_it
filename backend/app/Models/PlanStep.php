@@ -19,6 +19,10 @@ class PlanStep extends Model
         'due_date',
         'completed_at',
         'video_url',
+        'video_title',
+        'video_channel',
+        'video_view_count',
+        'video_published_at',
     ];
 
     protected function casts(): array
@@ -26,6 +30,7 @@ class PlanStep extends Model
         return [
             'due_date' => 'date',
             'completed_at' => 'datetime',
+            'video_published_at' => 'datetime',
         ];
     }
 

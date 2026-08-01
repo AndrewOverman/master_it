@@ -21,6 +21,8 @@ class PlanStepResource extends JsonResource
             'due_date' => $this->due_date?->format('Y-m-d'),
             'completed_at' => $this->completed_at?->toISOString(),
             'video_url' => $this->video_url,
+            'video_title' => $this->video_title,
+            'video_channel' => $this->video_channel,
         ];
     }
 }
