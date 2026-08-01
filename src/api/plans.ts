@@ -21,6 +21,15 @@ export async function getPlan(id: number): Promise<Plan> {
   return data;
 }
 
+// GET /api/v1/plans/{planId}/steps/{stepId}
+// Loads a single step with its resources. Resources are searched for
+// lazily on the backend the first time a step is fetched this way, so
+// this call may take longer than a typical GET on first view.
+export async function getStep(planId: number, stepId: number): Promise<PlanStep> {
+  const { data } = await apiClient.get<PlanStep>(`/api/v1/plans/${planId}/steps/${stepId}`);
+  return data;
+}
+
 // PATCH /api/v1/plans/{planId}/steps/{stepId}
 // Toggle a step's completion. Send the new desired state explicitly
 // rather than "toggle" server-side, so retries are safe (idempotent).

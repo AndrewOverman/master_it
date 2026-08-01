@@ -17,6 +17,7 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { NewPlanScreen } from '../screens/NewPlanScreen';
 import { GeneratingScreen } from '../screens/GeneratingScreen';
 import { PlanDetailScreen } from '../screens/PlanDetailScreen';
+import { StepDetailScreen } from '../screens/StepDetailScreen';
 import { PlansListScreen } from '../screens/PlansListScreen';
 import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -28,6 +29,7 @@ export type AppStackParamList = {
   NewPlan: undefined;
   Generating: { planId: number };
   PlanDetail: { planId: number };
+  StepDetail: { planId: number; stepId: number };
   PlanFailed: { planId: number; message: string | null };
   PlansList: undefined;
   Settings: undefined;
@@ -55,6 +57,18 @@ function PlanFailedScreen({ route, navigation }: any) {
         Try again
       </Text>
     </View>
+  );
+}
+
+function BackButton() {
+  const navigation = useNavigation();
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.goBack()}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+    >
+      <Ionicons name="chevron-back" size={28} color="#111827" />
+    </TouchableOpacity>
   );
 }
 
@@ -110,6 +124,11 @@ function AppStackNavigator() {
         options={{ title: 'Building your plan', headerBackVisible: false, headerLeft: () => null }}
       />
       <AppStack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: 'My Plan' }} />
+      <AppStack.Screen
+        name="StepDetail"
+        component={StepDetailScreen}
+        options={{ title: 'Step', headerLeft: () => <BackButton /> }}
+      />
       <AppStack.Screen name="PlanFailed" component={PlanFailedScreen} options={{ title: 'Plan Failed' }} />
       <AppStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'My Plans' }} />
 

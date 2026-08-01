@@ -3,6 +3,14 @@
 
 export type PlanStatus = 'generating' | 'ready' | 'failed';
 
+export interface StepResource {
+  id: number;
+  url: string;
+  title: string;
+  source: string | null;
+  description: string | null;
+}
+
 export interface PlanStep {
   id: number;
   order: number;
@@ -14,6 +22,10 @@ export interface PlanStep {
   video_url: string | null; // YouTube link, not every step has one (max 2 per plan)
   video_title: string | null;
   video_channel: string | null;
+  // Only present once fetched via getStep() — absent (undefined) on the
+  // steps embedded in a plan's own response, since the plan list doesn't
+  // load resources for every step up front.
+  resources?: StepResource[];
 }
 
 export interface Plan {

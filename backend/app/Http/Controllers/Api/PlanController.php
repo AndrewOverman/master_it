@@ -137,17 +137,32 @@ class PlanController extends Controller
         // anchored on now() instead of the source plan's original
         // created_at so the copy's due dates land in the future.
         $cumulativeDays = 0;
-        foreach ($plan->steps as $step) {
+        foreach ($plan->steps()->with('resources')->get() as $step) {
             $cumulativeDays += $step->estimated_days ?? 0;
 
-            $copy->steps()->create([
+            $newStep = $copy->steps()->create([
                 'order' => $step->order,
                 'title' => $step->title,
                 'description' => $step->description,
                 'estimated_days' => $step->estimated_days,
                 'due_date' => now()->copy()->addDays($cumulativeDays),
                 'video_url' => $step->video_url,
+                'video_title' => $step->video_title,
+                'video_channel' => $step->video_channel,
+                'video_view_count' => $step->video_view_count,
+                'video_published_at' => $step->video_published_at,
+                'resources_fetched_at' => $step->resources_fetched_at,
             ]);
+
+            foreach ($step->resources as $resource) {
+                $newStep->resources()->create([
+                    'url' => $resource->url,
+                    'title' => $resource->title,
+                    'source' => $resource->source,
+                    'description' => $resource->description,
+                    'order' => $resource->order,
+                ]);
+            }
         }
 
         return new PlanResource($copy->load('steps'));

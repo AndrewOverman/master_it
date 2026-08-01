@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import { getToken } from '../utils/tokenStorage';
 
 // Swap for your actual API base URL (env-driven in a real app)
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.yourapp.com';
@@ -14,7 +14,7 @@ export const apiClient = axios.create({
 
 // Attach the Sanctum token to every request
 apiClient.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('auth_token');
+  const token = await getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

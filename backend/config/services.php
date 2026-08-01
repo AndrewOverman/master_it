@@ -44,4 +44,8 @@ return [
         'api_key' => env('YOUTUBE_API_KEY'),
     ],
 
+    'resources' => [
+        'max_per_step' => (int) env('MAX_RESOURCES_PER_STEP', 1),
+    ],
+
 ];

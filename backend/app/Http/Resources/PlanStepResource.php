@@ -23,6 +23,7 @@ class PlanStepResource extends JsonResource
             'video_url' => $this->video_url,
             'video_title' => $this->video_title,
             'video_channel' => $this->video_channel,
+            'resources' => StepResourceResource::collection($this->whenLoaded('resources')),
         ];
     }
 }
