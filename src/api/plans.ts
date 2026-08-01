@@ -81,3 +81,11 @@ export async function copyPlan(planId: number): Promise<Plan> {
   const { data } = await apiClient.post<Plan>(`/api/v1/plans/${planId}/copy`);
   return data;
 }
+
+// GET /api/v1/plans/{planId}/related
+// Featured plans whose prompt text overlaps with this plan's, ranked
+// by relevance. May come back empty if nothing genuinely overlaps.
+export async function getRelatedPlans(planId: number): Promise<Plan[]> {
+  const { data } = await apiClient.get<Plan[]>(`/api/v1/plans/${planId}/related`);
+  return data;
+}

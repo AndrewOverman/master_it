@@ -20,6 +20,7 @@ Route::prefix('v1')->group(function () {
         Route::post('plans', [PlanController::class, 'store']);
         Route::get('plans/featured', [PlanController::class, 'featured']);
         Route::post('plans/{plan}/copy', [PlanController::class, 'copy']);
+        Route::get('plans/{plan}/related', [PlanController::class, 'related']);
         Route::get('plans/{plan}', [PlanController::class, 'show']);
         Route::patch('plans/{plan}', [PlanController::class, 'update']);
         Route::patch('plans/{plan}/steps/{step}', [PlanStepController::class, 'update']);

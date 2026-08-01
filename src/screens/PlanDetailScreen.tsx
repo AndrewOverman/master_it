@@ -14,7 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPlan, setStepComplete, setStepDueDate } from '../api/plans';
+import { getPlan, setStepComplete, setStepDueDate, getRelatedPlans } from '../api/plans';
+import { useCopyPlan } from '../hooks/useCopyPlan';
+import { PlanCard } from '../components/PlanCard';
 import type { Plan, PlanStep } from '../types/plan';
 
 // react-native-web has no native <input>, but Metro still bundles a raw
@@ -41,7 +43,7 @@ function formatDateInput(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function PlanDetailScreen({ route }: any) {
+export function PlanDetailScreen({ route, navigation }: any) {
   const { planId } = route.params;
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
@@ -52,6 +54,16 @@ export function PlanDetailScreen({ route }: any) {
     queryKey: ['plan', planId],
     queryFn: () => getPlan(planId),
   });
+
+  // Independent of the query above — the backend reads the current
+  // plan's prompt itself via the route-bound model, so this doesn't
+  // need to wait on `plan` to load first.
+  const { data: relatedPlans } = useQuery({
+    queryKey: ['plan', planId, 'related'],
+    queryFn: () => getRelatedPlans(planId),
+  });
+
+  const { copyMutation, handleCopyPress } = useCopyPlan(navigation);
 
   const toggleMutation = useMutation({
     mutationFn: ({ stepId, completed }: { stepId: number; completed: boolean }) =>
@@ -285,6 +297,21 @@ export function PlanDetailScreen({ route }: any) {
         keyExtractor={(step) => String(step.id)}
         renderItem={renderStep}
         contentContainerStyle={styles.list}
+        ListFooterComponent={
+          relatedPlans && relatedPlans.length > 0 ? (
+            <View style={styles.relatedSection}>
+              <Text style={styles.relatedTitle}>Related Plans</Text>
+              {relatedPlans.map((related) => (
+                <PlanCard
+                  key={related.id}
+                  plan={related}
+                  onCopy={() => handleCopyPress(related)}
+                  isCopying={copyMutation.isPending && copyMutation.variables === related.id}
+                />
+              ))}
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -297,6 +324,8 @@ const styles = StyleSheet.create({
   planTitle: { fontSize: 22, fontWeight: '700', color: '#111827' },
   progress: { fontSize: 13, color: '#6B7280', marginTop: 4 },
   list: { padding: 20 },
+  relatedSection: { marginTop: 12, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  relatedTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 16 },
   stepRow: { marginBottom: 20 },
   stepToggleRow: { flexDirection: 'row' },
   stepExtras: { marginLeft: 38 },

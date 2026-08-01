@@ -109,11 +109,13 @@ function AppStackNavigator() {
         component={GeneratingScreen}
         options={{ title: 'Building your plan', headerBackVisible: false, headerLeft: () => null }}
       />
-      <AppStack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: 'Your Plan' }} />
+      <AppStack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: 'My Plan' }} />
       <AppStack.Screen name="PlanFailed" component={PlanFailedScreen} options={{ title: 'Plan Failed' }} />
-      <AppStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'Your Plans' }} />
-      <AppStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <AppStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'My Plans' }} />
+
       <AppStack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
+      <AppStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      
     </AppStack.Navigator>
   );
 }

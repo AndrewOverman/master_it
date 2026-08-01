@@ -13,6 +13,7 @@ class Plan extends Model
 
     protected $fillable = [
         'user_id',
+        'source_plan_id',
         'title',
         'emoji',
         'original_prompt',
@@ -39,5 +40,10 @@ class Plan extends Model
     public function steps(): HasMany
     {
         return $this->hasMany(PlanStep::class)->orderBy('order');
+    }
+
+    public function sourcePlan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class, 'source_plan_id');
     }
 }

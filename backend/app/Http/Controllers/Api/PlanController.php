@@ -87,6 +87,26 @@ class PlanController extends Controller
         return PlanResource::collection($plans);
     }
 
+    public function related(Request $request, Plan $plan)
+    {
+        abort_unless($plan->user_id === $request->user()->id, 404);
+
+        $related = Plan::with('steps')
+            ->where('is_featured', true)
+            ->where('status', 'ready')
+            ->where('id', '!=', $plan->id)
+            // Exclude the featured plan this one was copied from — its
+            // original_prompt is identical, so it would otherwise always
+            // rank first and show the user the plan they just added.
+            ->when($plan->source_plan_id, fn ($query, $sourcePlanId) => $query->where('id', '!=', $sourcePlanId))
+            ->whereRaw("to_tsvector('english', original_prompt) @@ plainto_tsquery('english', ?)", [$plan->original_prompt])
+            ->orderByRaw("ts_rank(to_tsvector('english', original_prompt), plainto_tsquery('english', ?)) DESC", [$plan->original_prompt])
+            ->limit(5)
+            ->get();
+
+        return PlanResource::collection($related);
+    }
+
     public function copy(Request $request, Plan $plan)
     {
         // Deliberately not an ownership check — this plan usually belongs
@@ -103,6 +123,7 @@ class PlanController extends Controller
         }
 
         $copy = $user->plans()->create([
+            'source_plan_id' => $plan->id,
             'title' => $plan->title,
             'emoji' => $plan->emoji,
             'original_prompt' => $plan->original_prompt,
