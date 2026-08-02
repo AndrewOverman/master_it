@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,11 +17,8 @@ import YoutubeIframe from 'react-native-youtube-iframe';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getStep, setStepDueDate } from '../api/plans';
 import type { Plan, PlanStep } from '../types/plan';
-
-// Same DOM-escape-hatch trick used in PlanDetailScreen — see the comment
-// there for why this is the reliable cross-platform way to get these.
-const WebDateInput = 'input' as any;
-const WebIframe = 'iframe' as any;
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 function getYouTubeVideoId(url: string): string | null {
   const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -42,6 +39,8 @@ export function StepDetailScreen({ route, navigation }: any) {
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
   const videoPlayerWidth = windowWidth - 40;
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { data: step, isLoading } = useQuery({
     queryKey: ['plan', planId, 'step', stepId],
@@ -109,7 +108,7 @@ export function StepDetailScreen({ route, navigation }: any) {
   if (isLoading || !step) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.textPrimary} />
       </View>
     );
   }
@@ -127,12 +126,12 @@ export function StepDetailScreen({ route, navigation }: any) {
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Due date</Text>
         <TouchableOpacity style={styles.dueDateRow} onPress={openDateEditor}>
-          <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+          <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
           <Text style={styles.dueDateText}>{step.due_date ? `Due ${step.due_date}` : 'Set a due date'}</Text>
-          <Ionicons name="pencil" size={14} color="#9CA3AF" style={styles.dueDateEditIcon} />
+          <Ionicons name="pencil" size={14} color={colors.textPlaceholder} style={styles.dueDateEditIcon} />
         </TouchableOpacity>
 
-        {isEditingDate && Platform.OS !== 'web' && (
+        {isEditingDate && (
           <View style={styles.datePickerRow}>
             <DateTimePicker
               value={pendingDate ?? new Date()}
@@ -160,23 +159,6 @@ export function StepDetailScreen({ route, navigation }: any) {
             )}
           </View>
         )}
-
-        {isEditingDate && Platform.OS === 'web' && (
-          <WebDateInput
-            type="date"
-            value={step.due_date ?? ''}
-            autoFocus
-            onChange={(e: any) => {
-              const value = e.target.value;
-              setIsEditingDate(false);
-              if (value) {
-                dueDateMutation.mutate(value);
-              }
-            }}
-            onBlur={() => setIsEditingDate(false)}
-            style={styles.webDateInput}
-          />
-        )}
       </View>
 
       {(thumbnailUrl || embedUrl) && (
@@ -194,21 +176,12 @@ export function StepDetailScreen({ route, navigation }: any) {
 
           {embedUrl && isPlaying && (
             <View style={styles.videoPlayer}>
-              {Platform.OS === 'web' ? (
-                <WebIframe
-                  src={embedUrl}
-                  style={styles.videoPlayerFrame}
-                  allow="autoplay; encrypted-media"
-                  allowFullScreen
-                />
-              ) : (
-                <YoutubeIframe
-                  videoId={videoId!}
-                  width={videoPlayerWidth}
-                  height={videoPlayerWidth * (9 / 16)}
-                  play
-                />
-              )}
+              <YoutubeIframe
+                videoId={videoId!}
+                width={videoPlayerWidth}
+                height={videoPlayerWidth * (9 / 16)}
+                play
+              />
               <TouchableOpacity
                 style={styles.videoCloseButton}
                 onPress={() => setIsPlaying(false)}
@@ -237,7 +210,7 @@ export function StepDetailScreen({ route, navigation }: any) {
                 <Text style={styles.resourceTitle} numberOfLines={2}>
                   {resource.title}
                 </Text>
-                <Ionicons name="open-outline" size={16} color="#9CA3AF" />
+                <Ionicons name="open-outline" size={16} color={colors.textPlaceholder} />
               </View>
               {resource.source && <Text style={styles.resourceSource}>{resource.source}</Text>}
               {resource.description && <Text style={styles.resourceDescription}>{resource.description}</Text>}
@@ -249,90 +222,82 @@ export function StepDetailScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  description: { fontSize: 15, color: '#374151', marginTop: 10, lineHeight: 21 },
-  section: { marginTop: 24 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', marginBottom: 10 },
-  dueDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignSelf: 'flex-start',
-  },
-  dueDateText: { fontSize: 14, color: '#374151', marginLeft: 8 },
-  dueDateEditIcon: { marginLeft: 8 },
-  datePickerRow: { marginTop: 8 },
-  datePickerDoneButton: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: '#111827',
-  },
-  datePickerDoneText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  webDateInput: {
-    marginTop: 8,
-    fontSize: 14,
-    padding: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  videoThumbnail: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  videoImage: { width: '100%', height: '100%', backgroundColor: '#E5E7EB' },
-  videoPlayOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.15)',
-  },
-  videoLabel: { fontSize: 12, fontWeight: '600', color: '#374151', paddingVertical: 8, paddingHorizontal: 10 },
-  videoPlayer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
-  videoPlayerFrame: { flex: 1 },
-  videoCloseButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    borderRadius: 13,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  noResourcesText: { fontSize: 14, color: '#9CA3AF' },
-  resourceCard: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 10,
-  },
-  resourceCardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  resourceTitle: { fontSize: 15, fontWeight: '600', color: '#111827', flex: 1, marginRight: 8 },
-  resourceSource: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-  resourceDescription: { fontSize: 13, color: '#6B7280', marginTop: 6, lineHeight: 18 },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+    content: { padding: 20, paddingBottom: 40 },
+    title: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
+    description: { fontSize: 15, color: colors.textSecondary, marginTop: 10, lineHeight: 21 },
+    section: { marginTop: 24 },
+    sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', marginBottom: 10 },
+    dueDateRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignSelf: 'flex-start',
+    },
+    dueDateText: { fontSize: 14, color: colors.textSecondary, marginLeft: 8 },
+    dueDateEditIcon: { marginLeft: 8 },
+    datePickerRow: { marginTop: 8 },
+    datePickerDoneButton: {
+      alignSelf: 'flex-end',
+      marginTop: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      backgroundColor: colors.textPrimary,
+    },
+    datePickerDoneText: { color: colors.background, fontSize: 13, fontWeight: '600' },
+    videoThumbnail: {
+      width: '100%',
+      aspectRatio: 16 / 9,
+      borderRadius: 10,
+      overflow: 'hidden',
+      backgroundColor: colors.surfaceMuted,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    videoImage: { width: '100%', height: '100%', backgroundColor: colors.border },
+    videoPlayOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.15)',
+    },
+    videoLabel: { fontSize: 12, fontWeight: '600', color: colors.textSecondary, paddingVertical: 8, paddingHorizontal: 10 },
+    videoPlayer: {
+      width: '100%',
+      aspectRatio: 16 / 9,
+      borderRadius: 10,
+      overflow: 'hidden',
+      backgroundColor: '#000',
+    },
+    videoCloseButton: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      borderRadius: 13,
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    },
+    noResourcesText: { fontSize: 14, color: colors.textPlaceholder },
+    resourceCard: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 14,
+      marginBottom: 10,
+    },
+    resourceCardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+    resourceTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, flex: 1, marginRight: 8 },
+    resourceSource: { fontSize: 12, color: colors.textPlaceholder, marginTop: 4 },
+    resourceDescription: { fontSize: 13, color: colors.textMuted, marginTop: 6, lineHeight: 18 },
+  });

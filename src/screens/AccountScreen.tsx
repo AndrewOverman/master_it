@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCurrentUser, updateProfile } from '../api/auth';
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 // Prefers the specific field validation message (e.g. "The email has
 // already been taken.") over Laravel's generic top-level message.
@@ -22,6 +24,8 @@ function extractErrorMessage(error: any, fallback: string): string {
 
 export function AccountScreen() {
   const queryClient = useQueryClient();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { data: user, isLoading } = useQuery({
     queryKey: ['user'],
@@ -93,7 +97,7 @@ export function AccountScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.textPrimary} />
       </View>
     );
   }
@@ -128,7 +132,7 @@ export function AccountScreen() {
         disabled={profileMutation.isPending}
       >
         {profileMutation.isPending ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.background} />
         ) : (
           <Text style={styles.buttonText}>Save Changes</Text>
         )}
@@ -171,7 +175,7 @@ export function AccountScreen() {
         disabled={passwordMutation.isPending}
       >
         {passwordMutation.isPending ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.background} />
         ) : (
           <Text style={styles.buttonText}>Update Password</Text>
         )}
@@ -180,29 +184,30 @@ export function AccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, width: '100%', maxWidth: 520, alignSelf: 'center' },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 16 },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#111827',
-    marginBottom: 14,
-  },
-  button: {
-    backgroundColor: '#111827',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 28 },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    content: { padding: 20, width: '100%', maxWidth: 520, alignSelf: 'center' },
+    sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 16 },
+    fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 16,
+      color: colors.textPrimary,
+      marginBottom: 14,
+    },
+    button: {
+      backgroundColor: colors.textPrimary,
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginTop: 4,
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: colors.background, fontSize: 16, fontWeight: '600' },
+    divider: { height: 1, backgroundColor: colors.borderMuted, marginVertical: 28 },
+  });

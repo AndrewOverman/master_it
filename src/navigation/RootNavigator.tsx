@@ -1,8 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { NavigationContainer, DrawerActions, useNavigation } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  DrawerActions,
+  useNavigation,
+} from '@react-navigation/native';
 import {
   createNativeStackNavigator,
   type NativeStackHeaderProps,
@@ -23,6 +29,8 @@ import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AccountScreen } from '../screens/AccountScreen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 export type AppStackParamList = {
   Featured: undefined;
@@ -47,6 +55,8 @@ const Drawer = createDrawerNavigator();
 
 // Minimal fallback screen if generation fails server-side
 function PlanFailedScreen({ route, navigation }: any) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.failedContainer}>
       <Text style={styles.failedTitle}>Couldn't build your plan</Text>
@@ -62,12 +72,13 @@ function PlanFailedScreen({ route, navigation }: any) {
 
 function BackButton() {
   const navigation = useNavigation();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
       onPress={() => navigation.goBack()}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
     >
-      <Ionicons name="chevron-back" size={28} color="#111827" />
+      <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
     </TouchableOpacity>
   );
 }
@@ -80,6 +91,8 @@ function BackButton() {
 function AppHeader({ options }: NativeStackHeaderProps) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View
@@ -140,6 +153,9 @@ function AppStackNavigator() {
 }
 
 function DrawerContent(props: DrawerContentComponentProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.drawerContainer}>
       <SafeAreaView edges={['top']} style={styles.drawerHeader}>
@@ -158,10 +174,10 @@ function DrawerContent(props: DrawerContentComponentProps) {
           label="Featured"
           labelStyle={styles.drawerItemLabel}
           icon={({ size, color }) => <Ionicons name="sparkles-outline" size={size} color={color} />}
-          activeTintColor="#111827"
-          inactiveTintColor="#374151"
-          activeBackgroundColor="#F3F4F6"
-          pressColor="#F3F4F6"
+          activeTintColor={colors.textPrimary}
+          inactiveTintColor={colors.textSecondary}
+          activeBackgroundColor={colors.surfaceMuted}
+          pressColor={colors.surfaceMuted}
           style={styles.drawerItem}
           onPress={() => {
             props.navigation.navigate('App', { screen: 'Featured' });
@@ -172,10 +188,10 @@ function DrawerContent(props: DrawerContentComponentProps) {
           label="New Plan"
           labelStyle={styles.drawerItemLabel}
           icon={({ size, color }) => <Ionicons name="add-circle-outline" size={size} color={color} />}
-          activeTintColor="#111827"
-          inactiveTintColor="#374151"
-          activeBackgroundColor="#F3F4F6"
-          pressColor="#F3F4F6"
+          activeTintColor={colors.textPrimary}
+          inactiveTintColor={colors.textSecondary}
+          activeBackgroundColor={colors.surfaceMuted}
+          pressColor={colors.surfaceMuted}
           style={styles.drawerItem}
           onPress={() => {
             props.navigation.navigate('App', { screen: 'NewPlan' });
@@ -186,10 +202,10 @@ function DrawerContent(props: DrawerContentComponentProps) {
           label="Plans"
           labelStyle={styles.drawerItemLabel}
           icon={({ size, color }) => <Ionicons name="list-outline" size={size} color={color} />}
-          activeTintColor="#111827"
-          inactiveTintColor="#374151"
-          activeBackgroundColor="#F3F4F6"
-          pressColor="#F3F4F6"
+          activeTintColor={colors.textPrimary}
+          inactiveTintColor={colors.textSecondary}
+          activeBackgroundColor={colors.surfaceMuted}
+          pressColor={colors.surfaceMuted}
           style={styles.drawerItem}
           onPress={() => {
             props.navigation.navigate('App', { screen: 'PlansList' });
@@ -205,10 +221,10 @@ function DrawerContent(props: DrawerContentComponentProps) {
             label="Settings"
             labelStyle={styles.drawerItemLabel}
             icon={({ size, color }) => <Ionicons name="settings-outline" size={size} color={color} />}
-            activeTintColor="#111827"
-            inactiveTintColor="#374151"
-            activeBackgroundColor="#F3F4F6"
-            pressColor="#F3F4F6"
+            activeTintColor={colors.textPrimary}
+            inactiveTintColor={colors.textSecondary}
+            activeBackgroundColor={colors.surfaceMuted}
+            pressColor={colors.surfaceMuted}
             style={styles.drawerItem}
             onPress={() => {
               props.navigation.navigate('App', { screen: 'Settings' });
@@ -219,10 +235,10 @@ function DrawerContent(props: DrawerContentComponentProps) {
             label="Account"
             labelStyle={styles.drawerItemLabel}
             icon={({ size, color }) => <Ionicons name="person-circle-outline" size={size} color={color} />}
-            activeTintColor="#111827"
-            inactiveTintColor="#374151"
-            activeBackgroundColor="#F3F4F6"
-            pressColor="#F3F4F6"
+            activeTintColor={colors.textPrimary}
+            inactiveTintColor={colors.textSecondary}
+            activeBackgroundColor={colors.surfaceMuted}
+            pressColor={colors.surfaceMuted}
             style={styles.drawerItem}
             onPress={() => {
               props.navigation.navigate('App', { screen: 'Account' });
@@ -236,13 +252,15 @@ function DrawerContent(props: DrawerContentComponentProps) {
 }
 
 function MainNavigator() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Drawer.Navigator
       drawerContent={(props) => <DrawerContent {...props} />}
       screenOptions={{
         headerShown: false,
         drawerStyle: styles.drawer,
-        overlayColor: 'rgba(17, 24, 39, 0.4)',
+        overlayColor: colors.overlay,
       }}
     >
       <Drawer.Screen name="App" component={AppStackNavigator} />
@@ -256,17 +274,34 @@ function MainNavigator() {
 // flipping isAuthenticated, with no manual navigation reset needed.
 function RootNavigatorContent() {
   const { isAuthenticated } = useAuth();
+  const { colors, colorScheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const navigationTheme = useMemo(() => {
+    const base = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        background: colors.background,
+        card: colors.surface,
+        border: colors.border,
+        text: colors.textPrimary,
+        primary: colors.textPrimary,
+      },
+    };
+  }, [colors, colorScheme]);
 
   if (isAuthenticated === null) {
     return (
       <View style={styles.bootContainer}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.textPrimary} />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <RootStack.Screen name="Main" component={MainNavigator} />
@@ -286,32 +321,33 @@ export function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  bootContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  failedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  failedTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
-  failedMessage: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20 },
-  retryLink: { fontSize: 15, color: '#2563EB', fontWeight: '600' },
-  header: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  headerContent: {
-    height: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  headerSlot: { width: 60, alignItems: 'flex-start', justifyContent: 'center' },
-  hamburgerIcon: { fontSize: 30, color: '#111827' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 19, fontWeight: '700', color: '#111827' },
-  drawer: { width: 280 },
-  drawerContainer: { flex: 1, backgroundColor: '#fff' },
-  drawerHeader: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
-  drawerTitle: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  drawerSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  drawerDivider: { height: 1, backgroundColor: '#F3F4F6' },
-  drawerScroll: { flex: 1 },
-  drawerContent: { paddingTop: 8, paddingHorizontal: 8 },
-  drawerFooter: { backgroundColor: '#fff' },
-  drawerFooterContent: { paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
-  drawerItem: { borderRadius: 10 },
-  drawerItemLabel: { fontSize: 15, fontWeight: '600' },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    bootContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+    failedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+    failedTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
+    failedMessage: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: 20 },
+    retryLink: { fontSize: 15, color: colors.link, fontWeight: '600' },
+    header: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
+    headerContent: {
+      height: 68,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+    },
+    headerSlot: { width: 60, alignItems: 'flex-start', justifyContent: 'center' },
+    hamburgerIcon: { fontSize: 30, color: colors.textPrimary },
+    headerTitle: { flex: 1, textAlign: 'center', fontSize: 19, fontWeight: '700', color: colors.textPrimary },
+    drawer: { width: 280 },
+    drawerContainer: { flex: 1, backgroundColor: colors.surface },
+    drawerHeader: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
+    drawerTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
+    drawerSubtitle: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+    drawerDivider: { height: 1, backgroundColor: colors.borderMuted },
+    drawerScroll: { flex: 1 },
+    drawerContent: { paddingTop: 8, paddingHorizontal: 8 },
+    drawerFooter: { backgroundColor: colors.surface },
+    drawerFooterContent: { paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
+    drawerItem: { borderRadius: 10 },
+    drawerItemLabel: { fontSize: 15, fontWeight: '600' },
+  });

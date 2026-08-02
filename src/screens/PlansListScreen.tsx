@@ -1,13 +1,17 @@
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listPlans, setPlanComplete } from '../api/plans';
 import type { Plan } from '../types/plan';
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 export function PlansListScreen({ navigation }: any) {
   const queryClient = useQueryClient();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   // Keyed by plan id so the swiped-open row can be closed by the button
   // press that triggers its own action, without closing every other row.
   const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
@@ -53,7 +57,7 @@ export function PlansListScreen({ navigation }: any) {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.textPrimary} />
       </View>
     );
   }
@@ -82,7 +86,7 @@ export function PlansListScreen({ navigation }: any) {
           closeSwipeable();
         }}
       >
-        <Ionicons name={isCompleted ? 'arrow-undo' : 'checkmark'} size={22} color="#fff" />
+        <Ionicons name={isCompleted ? 'arrow-undo' : 'checkmark'} size={22} color={colors.background} />
         <Text style={styles.swipeActionText}>{isCompleted ? 'Undo' : 'Complete'}</Text>
       </TouchableOpacity>
     );
@@ -104,7 +108,7 @@ export function PlansListScreen({ navigation }: any) {
             {item.emoji ? (
               <Text style={styles.planEmoji}>{item.emoji}</Text>
             ) : (
-              <Ionicons name="image-outline" size={22} color="#9CA3AF" />
+              <Ionicons name="image-outline" size={22} color={colors.textPlaceholder} />
             )}
           </View>
           <View style={styles.planText}>
@@ -116,7 +120,7 @@ export function PlansListScreen({ navigation }: any) {
             </Text>
           </View>
           {showComplete && (
-            <Ionicons name="checkmark-circle" size={24} color="#22C55E" style={styles.completeIcon} />
+            <Ionicons name="checkmark-circle" size={24} color={colors.success} style={styles.completeIcon} />
           )}
         </TouchableOpacity>
       </Swipeable>
@@ -135,38 +139,39 @@ export function PlansListScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  emptyText: { fontSize: 15, color: '#6B7280', textAlign: 'center' },
-  list: { padding: 20, flexGrow: 1 },
-  planRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  planImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  planEmoji: { fontSize: 24 },
-  planText: { flex: 1 },
-  planTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  planTitleDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
-  completeIcon: { marginLeft: 10 },
-  planMeta: { fontSize: 13, color: '#6B7280', marginTop: 4, textTransform: 'capitalize' },
-  swipeAction: {
-    width: 96,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swipeActionComplete: { backgroundColor: '#22C55E' },
-  swipeActionUndo: { backgroundColor: '#6B7280' },
-  swipeActionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 4 },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background },
+    emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
+    list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
+    planRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderMuted,
+    },
+    planImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14,
+    },
+    planEmoji: { fontSize: 24 },
+    planText: { flex: 1 },
+    planTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    planTitleDone: { textDecorationLine: 'line-through', color: colors.textPlaceholder },
+    completeIcon: { marginLeft: 10 },
+    planMeta: { fontSize: 13, color: colors.textMuted, marginTop: 4, textTransform: 'capitalize' },
+    swipeAction: {
+      width: 96,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    swipeActionComplete: { backgroundColor: colors.success },
+    swipeActionUndo: { backgroundColor: colors.textMuted },
+    swipeActionText: { color: colors.background, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  });

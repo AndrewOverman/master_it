@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,13 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import { login, register } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 export function LoginScreen({ navigation }: any) {
   const { signIn } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -62,7 +66,7 @@ export function LoginScreen({ navigation }: any) {
           <TextInput
             style={styles.input}
             placeholder="Name"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textPlaceholder}
             value={name}
             onChangeText={setName}
             autoCapitalize="words"
@@ -72,7 +76,7 @@ export function LoginScreen({ navigation }: any) {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textPlaceholder}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -83,7 +87,7 @@ export function LoginScreen({ navigation }: any) {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textPlaceholder}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -96,7 +100,7 @@ export function LoginScreen({ navigation }: any) {
           disabled={mutation.isPending}
         >
           {mutation.isPending ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.background} />
           ) : (
             <Text style={styles.submitButtonText}>{mode === 'login' ? 'Log In' : 'Sign Up'}</Text>
           )}
@@ -116,29 +120,30 @@ export function LoginScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { flex: 1, justifyContent: 'center', padding: 24 },
-  heading: { fontSize: 26, fontWeight: '700', color: '#111827' },
-  subheading: { fontSize: 15, color: '#6B7280', marginTop: 6, marginBottom: 28 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#111827',
-    marginBottom: 14,
-  },
-  submitButton: {
-    backgroundColor: '#111827',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  toggleButton: { marginTop: 20, alignItems: 'center' },
-  toggleText: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { flex: 1, justifyContent: 'center', padding: 24 },
+    heading: { fontSize: 26, fontWeight: '700', color: colors.textPrimary },
+    subheading: { fontSize: 15, color: colors.textMuted, marginTop: 6, marginBottom: 28 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 16,
+      color: colors.textPrimary,
+      marginBottom: 14,
+    },
+    submitButton: {
+      backgroundColor: colors.textPrimary,
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    submitButtonDisabled: { opacity: 0.6 },
+    submitButtonText: { color: colors.background, fontSize: 16, fontWeight: '600' },
+    toggleButton: { marginTop: 20, alignItems: 'center' },
+    toggleText: { fontSize: 14, color: colors.link, fontWeight: '600' },
+  });

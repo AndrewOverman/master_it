@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -6,10 +6,14 @@ import { getPlan, setStepComplete, getRelatedPlans } from '../api/plans';
 import { useCopyPlan } from '../hooks/useCopyPlan';
 import { PlanCard } from '../components/PlanCard';
 import type { Plan, PlanStep } from '../types/plan';
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 export function PlanDetailScreen({ route, navigation }: any) {
   const { planId } = route.params;
   const queryClient = useQueryClient();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['plan', planId],
@@ -62,7 +66,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
   if (isLoading || !plan) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111827" />
+        <ActivityIndicator size="large" color={colors.textPrimary} />
       </View>
     );
   }
@@ -94,7 +98,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
             </Text>
             {item.due_date && <Text style={styles.stepDueDate}>Due {item.due_date}</Text>}
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+          <Ionicons name="chevron-forward" size={18} color={colors.border} />
         </TouchableOpacity>
       </View>
     );
@@ -133,33 +137,34 @@ export function PlanDetailScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  planTitle: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  progress: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  list: { padding: 20 },
-  relatedSection: { marginTop: 12, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  relatedTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 16 },
-  stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
-  checkboxTouchable: { paddingTop: 2 },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  checkboxChecked: { backgroundColor: '#111827', borderColor: '#111827' },
-  checkmark: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  stepContent: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
-  stepText: { flex: 1 },
-  stepTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  stepTitleDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
-  stepDescription: { fontSize: 14, color: '#6B7280', marginTop: 4 },
-  stepDueDate: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+    header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
+    planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
+    progress: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+    list: { padding: 20 },
+    relatedSection: { marginTop: 12, paddingTop: 24, borderTopWidth: 1, borderTopColor: colors.borderMuted },
+    relatedTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 16 },
+    stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+    checkboxTouchable: { paddingTop: 2 },
+    checkbox: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14,
+    },
+    checkboxChecked: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+    checkmark: { color: colors.background, fontSize: 13, fontWeight: '700' },
+    stepContent: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
+    stepText: { flex: 1 },
+    stepTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    stepTitleDone: { textDecorationLine: 'line-through', color: colors.textPlaceholder },
+    stepDescription: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
+    stepDueDate: { fontSize: 12, color: colors.textPlaceholder, marginTop: 4 },
+  });

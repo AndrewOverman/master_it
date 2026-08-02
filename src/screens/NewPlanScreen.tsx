@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import { createPlan } from '../api/plans';
 import type { CreatePlanRequest } from '../types/plan';
+import { useTheme } from '../theme/ThemeContext';
+import type { ThemeColors } from '../theme/colors';
 
 type SkillLevel = CreatePlanRequest['skill_level'];
 type TimeCommitment = CreatePlanRequest['time_commitment'];
@@ -29,6 +31,8 @@ const TIME_COMMITMENTS: { label: string; value: TimeCommitment }[] = [
 ];
 
 export function NewPlanScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [prompt, setPrompt] = useState('');
   const [skillLevel, setSkillLevel] = useState<SkillLevel>('beginner');
   const [timeCommitment, setTimeCommitment] = useState<TimeCommitment>('moderate');
@@ -78,7 +82,7 @@ export function NewPlanScreen({ navigation }: any) {
       <TextInput
         style={styles.promptInput}
         placeholder="e.g. I want to learn to play basic chords on guitar"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={colors.textPlaceholder}
         multiline
         value={prompt}
         onChangeText={setPrompt}
@@ -139,7 +143,7 @@ export function NewPlanScreen({ navigation }: any) {
           <TextInput
             style={styles.durationInput}
             placeholder="0"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textPlaceholder}
             value={weeks}
             onChangeText={(text) => setWeeks(text.replace(/[^0-9]/g, ''))}
             keyboardType="number-pad"
@@ -152,7 +156,7 @@ export function NewPlanScreen({ navigation }: any) {
           <TextInput
             style={styles.durationInput}
             placeholder="0"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textPlaceholder}
             value={days}
             onChangeText={(text) => setDays(text.replace(/[^0-9]/g, ''))}
             keyboardType="number-pad"
@@ -170,7 +174,7 @@ export function NewPlanScreen({ navigation }: any) {
         disabled={mutation.isPending}
       >
         {mutation.isPending ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.background} />
         ) : (
           <Text style={styles.submitButtonText}>Build my plan</Text>
         )}
@@ -179,57 +183,58 @@ export function NewPlanScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 20, paddingTop: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
-  heading: { fontSize: 26, fontWeight: '700', color: '#111827' },
-  subheading: { fontSize: 15, color: '#6B7280', marginTop: 6, marginBottom: 24 },
-  promptInput: {
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: '#111827',
-    textAlignVertical: 'top',
-    marginBottom: 24,
-  },
-  sectionLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 10 },
-  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  optionChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-  },
-  optionChipSelected: { backgroundColor: '#111827', borderColor: '#111827' },
-  optionChipText: { fontSize: 14, color: '#374151' },
-  optionChipTextSelected: { color: '#fff', fontWeight: '600' },
-  durationRow: { flexDirection: 'row', gap: 16, justifyContent: 'center' },
-  durationField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  durationInput: {
-    width: 64,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    color: '#111827',
-    textAlign: 'center',
-  },
-  durationUnit: { fontSize: 14, color: '#374151' },
-  durationHint: { fontSize: 12, color: '#9CA3AF', marginTop: 8, marginBottom: 24 },
-  submitButton: {
-    backgroundColor: '#111827',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { padding: 20, paddingTop: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
+    heading: { fontSize: 26, fontWeight: '700', color: colors.textPrimary },
+    subheading: { fontSize: 15, color: colors.textMuted, marginTop: 6, marginBottom: 24 },
+    promptInput: {
+      minHeight: 100,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 14,
+      fontSize: 16,
+      color: colors.textPrimary,
+      textAlignVertical: 'top',
+      marginBottom: 24,
+    },
+    sectionLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 },
+    optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
+    optionChip: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceMuted,
+    },
+    optionChipSelected: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+    optionChipText: { fontSize: 14, color: colors.textSecondary },
+    optionChipTextSelected: { color: colors.background, fontWeight: '600' },
+    durationRow: { flexDirection: 'row', gap: 16, justifyContent: 'center' },
+    durationField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    durationInput: {
+      width: 64,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      fontSize: 16,
+      color: colors.textPrimary,
+      textAlign: 'center',
+    },
+    durationUnit: { fontSize: 14, color: colors.textSecondary },
+    durationHint: { fontSize: 12, color: colors.textPlaceholder, marginTop: 8, marginBottom: 24 },
+    submitButton: {
+      backgroundColor: colors.textPrimary,
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    submitButtonDisabled: { opacity: 0.6 },
+    submitButtonText: { color: colors.background, fontSize: 16, fontWeight: '600' },
+  });
