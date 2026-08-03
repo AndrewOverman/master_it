@@ -38,4 +38,34 @@ class UserController extends Controller
 
         return $user;
     }
+
+    public function export(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'user' => $user,
+            'plans' => $user->plans()->with('steps.resources')->get(),
+        ]);
+    }
+
+    public function destroy(Request $request)
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($validated['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['The provided password is incorrect.'],
+            ]);
+        }
+
+        $user->tokens()->delete();
+        $user->delete();
+
+        return response()->noContent();
+    }
 }

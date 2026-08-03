@@ -15,6 +15,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('user', [UserController::class, 'show']);
         Route::patch('user', [UserController::class, 'update']);
+        Route::get('user/export', [UserController::class, 'export']);
+        Route::delete('user', [UserController::class, 'destroy']);
 
         Route::get('plans', [PlanController::class, 'index']);
         Route::post('plans', [PlanController::class, 'store']);
