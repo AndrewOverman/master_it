@@ -36,7 +36,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setStoredThemePreference(next);
   };
 
-  const colorScheme: ColorScheme = preference === 'system' ? systemColorScheme ?? 'light' : preference;
+  const colorScheme: ColorScheme =
+    preference === 'system' ? (systemColorScheme === 'dark' ? 'dark' : 'light') : preference;
   const colors = colorScheme === 'dark' ? darkColors : lightColors;
 
   const value = useMemo(

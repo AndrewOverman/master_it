@@ -5,6 +5,8 @@ node_modules/
 *.pem
 .env
 .env.local
+/ios/
+/android/
 
 /backend/vendor/
 /backend/node_modules/
