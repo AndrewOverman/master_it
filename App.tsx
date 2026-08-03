@@ -7,6 +7,7 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { setupOnlineManager } from './src/lib/offline';
 import { CACHE_BUSTER, MAX_CACHE_AGE, shouldDehydrateQuery } from './src/lib/queryPersistence';
 
@@ -26,21 +27,23 @@ function AppStatusBar() {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <PersistQueryClientProvider
-          client={queryClient}
-          persistOptions={{
-            persister,
-            maxAge: MAX_CACHE_AGE,
-            buster: CACHE_BUSTER,
-            dehydrateOptions: { shouldDehydrateQuery },
-          }}
-        >
-          <AppStatusBar />
-          <RootNavigator />
-        </PersistQueryClientProvider>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{
+              persister,
+              maxAge: MAX_CACHE_AGE,
+              buster: CACHE_BUSTER,
+              dehydrateOptions: { shouldDehydrateQuery },
+            }}
+          >
+            <AppStatusBar />
+            <RootNavigator />
+          </PersistQueryClientProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
