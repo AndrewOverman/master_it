@@ -43,7 +43,7 @@ class AuthRateLimitTest extends TestCase
             $response = $this->postJson('/api/v1/register', [
                 'name' => 'New User',
                 'email' => "new-user-{$i}@example.com",
-                'password' => 'password123',
+                'password' => 'Qx7mZpL2vNc9',
             ]);
 
             $response->assertStatus(201);
@@ -56,6 +56,18 @@ class AuthRateLimitTest extends TestCase
         ]);
 
         $response->assertStatus(429);
+    }
+
+    public function test_register_rejects_a_password_without_mixed_case_or_numbers(): void
+    {
+        $response = $this->postJson('/api/v1/register', [
+            'name' => 'New User',
+            'email' => 'weak-password@example.com',
+            'password' => 'alllowercase',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('password');
     }
 
     public function test_token_is_rejected_once_it_expires(): void
