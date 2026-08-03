@@ -19,6 +19,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // non-JSON requests, which throws RouteNotFoundException (a 500)
         // before auth:sanctum ever gets to return a clean 401. Never redirect.
         $middleware->redirectGuestsTo(fn () => null);
+
+        $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
