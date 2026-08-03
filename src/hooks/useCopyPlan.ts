@@ -2,12 +2,14 @@ import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { copyPlan } from '../api/plans';
 import type { Plan } from '../types/plan';
+import { useRequireOnline } from '../lib/offline';
 
 // Shared by any screen that shows copyable plan cards (Featured feed,
 // Related Plans) — confirm dialog, then clone into the user's own
 // plans and jump straight to it.
 export function useCopyPlan(navigation: any) {
   const queryClient = useQueryClient();
+  const requireOnline = useRequireOnline();
 
   const copyMutation = useMutation({
     mutationFn: copyPlan,
@@ -23,6 +25,7 @@ export function useCopyPlan(navigation: any) {
   });
 
   const handleCopyPress = (plan: Plan) => {
+    if (!requireOnline('add this plan')) return;
     Alert.alert(
       'Add to your plans?',
       `This adds "${plan.title}" to your plans so you can track it with checkboxes.`,

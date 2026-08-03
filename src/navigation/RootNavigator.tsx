@@ -30,6 +30,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { AccountScreen } from '../screens/AccountScreen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { useFeaturedOfflineSampleSync } from '../hooks/useFeaturedOfflineSample';
 import type { ThemeColors } from '../theme/colors';
 
 export type AppStackParamList = {
@@ -254,6 +255,7 @@ function DrawerContent(props: DrawerContentComponentProps) {
 function MainNavigator() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  useFeaturedOfflineSampleSync();
   return (
     <Drawer.Navigator
       drawerContent={(props) => <DrawerContent {...props} />}

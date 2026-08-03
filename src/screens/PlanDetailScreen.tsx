@@ -8,24 +8,30 @@ import { PlanCard } from '../components/PlanCard';
 import type { Plan, PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { useIsOnline, useRequireOnline } from '../lib/offline';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 export function PlanDetailScreen({ route, navigation }: any) {
   const { planId } = route.params;
   const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isOnline = useIsOnline();
+  const requireOnline = useRequireOnline();
 
-  const { data: plan, isLoading } = useQuery({
+  const { data: plan, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['plan', planId],
     queryFn: () => getPlan(planId),
   });
 
   // Independent of the query above — the backend reads the current
   // plan's prompt itself via the route-bound model, so this doesn't
-  // need to wait on `plan` to load first.
+  // need to wait on `plan` to load first. Not useful offline (it's
+  // never persisted), so don't bother attempting it without a connection.
   const { data: relatedPlans } = useQuery({
     queryKey: ['plan', planId, 'related'],
     queryFn: () => getRelatedPlans(planId),
+    enabled: isOnline,
   });
 
   const { copyMutation, handleCopyPress } = useCopyPlan(navigation);
@@ -64,6 +70,16 @@ export function PlanDetailScreen({ route, navigation }: any) {
   });
 
   if (isLoading || !plan) {
+    if (!isOnline) {
+      return (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
+          <Text style={styles.emptyText}>
+            Can't load this plan — you're offline and haven't opened it before.
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.textPrimary} />
@@ -72,6 +88,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
   }
 
   const completedCount = plan.steps.filter((step) => step.completed_at).length;
+  const syncedLabel = formatRelativeTime(dataUpdatedAt);
 
   const renderStep = ({ item }: { item: PlanStep }) => {
     const completed = Boolean(item.completed_at);
@@ -80,7 +97,10 @@ export function PlanDetailScreen({ route, navigation }: any) {
       <View style={styles.stepRow}>
         <TouchableOpacity
           style={styles.checkboxTouchable}
-          onPress={() => toggleMutation.mutate({ stepId: item.id, completed: !completed })}
+          onPress={() => {
+            if (!requireOnline('check off a step')) return;
+            toggleMutation.mutate({ stepId: item.id, completed: !completed });
+          }}
         >
           <View style={[styles.checkbox, completed && styles.checkboxChecked]}>
             {completed && <Text style={styles.checkmark}>✓</Text>}
@@ -111,6 +131,14 @@ export function PlanDetailScreen({ route, navigation }: any) {
         <Text style={styles.progress}>
           {completedCount} of {plan.steps.length} steps complete
         </Text>
+        {!isOnline && (
+          <View style={styles.offlineRow}>
+            <Ionicons name="cloud-offline-outline" size={13} color={colors.textPlaceholder} />
+            <Text style={styles.offlineText}>
+              You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
+            </Text>
+          </View>
+        )}
       </View>
       <FlatList
         data={[...plan.steps].sort((a, b) => a.order - b.order)}
@@ -140,10 +168,13 @@ export function PlanDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: 24, gap: 10 },
+    emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
     header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
     progress: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+    offlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+    offlineText: { flex: 1, fontSize: 12, color: colors.textPlaceholder },
     list: { padding: 20 },
     relatedSection: { marginTop: 12, paddingTop: 24, borderTopWidth: 1, borderTopColor: colors.borderMuted },
     relatedTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 16 },

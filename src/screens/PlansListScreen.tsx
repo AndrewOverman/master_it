@@ -7,11 +7,15 @@ import { listPlans, setPlanComplete } from '../api/plans';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { useIsOnline, useRequireOnline } from '../lib/offline';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 export function PlansListScreen({ navigation }: any) {
   const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isOnline = useIsOnline();
+  const requireOnline = useRequireOnline();
   // Keyed by plan id so the swiped-open row can be closed by the button
   // press that triggers its own action, without closing every other row.
   const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
@@ -19,6 +23,7 @@ export function PlansListScreen({ navigation }: any) {
   const {
     data: plans,
     isLoading,
+    dataUpdatedAt,
     refetch,
     isRefetching,
   } = useQuery({
@@ -55,6 +60,16 @@ export function PlansListScreen({ navigation }: any) {
   });
 
   if (isLoading) {
+    if (!isOnline) {
+      return (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
+          <Text style={styles.emptyText}>
+            You're offline. Plans you've opened before will show up here once they're cached.
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.textPrimary} />
@@ -70,6 +85,8 @@ export function PlansListScreen({ navigation }: any) {
     );
   }
 
+  const syncedLabel = formatRelativeTime(dataUpdatedAt);
+
   const renderItem = ({ item }: { item: Plan }) => {
     const isCompleted = Boolean(item.completed_at);
     const allStepsComplete =
@@ -82,8 +99,9 @@ export function PlansListScreen({ navigation }: any) {
       <TouchableOpacity
         style={[styles.swipeAction, isCompleted ? styles.swipeActionUndo : styles.swipeActionComplete]}
         onPress={() => {
-          completeMutation.mutate({ planId: item.id, completed: !isCompleted });
           closeSwipeable();
+          if (!requireOnline('mark a plan complete')) return;
+          completeMutation.mutate({ planId: item.id, completed: !isCompleted });
         }}
       >
         <Ionicons name={isCompleted ? 'arrow-undo' : 'checkmark'} size={22} color={colors.background} />
@@ -135,15 +153,36 @@ export function PlansListScreen({ navigation }: any) {
       renderItem={renderItem}
       refreshing={isRefetching}
       onRefresh={refetch}
+      ListHeaderComponent={
+        !isOnline ? (
+          <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.offlineBannerText}>
+              You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
+            </Text>
+          </View>
+        ) : null
+      }
     />
   );
 }
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background, gap: 10 },
     emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
     list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
+    offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceMuted,
+      marginBottom: 16,
+    },
+    offlineBannerText: { flex: 1, fontSize: 12.5, color: colors.textMuted },
     planRow: {
       flexDirection: 'row',
       alignItems: 'center',

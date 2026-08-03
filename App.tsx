@@ -1,11 +1,23 @@
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { setupOnlineManager } from './src/lib/offline';
+import { CACHE_BUSTER, MAX_CACHE_AGE, shouldDehydrateQuery } from './src/lib/queryPersistence';
+
+setupOnlineManager();
 
 const queryClient = new QueryClient();
+
+const persister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'master-it-query-cache',
+});
 
 function AppStatusBar() {
   const { colorScheme } = useTheme();
@@ -16,10 +28,18 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister,
+            maxAge: MAX_CACHE_AGE,
+            buster: CACHE_BUSTER,
+            dehydrateOptions: { shouldDehydrateQuery },
+          }}
+        >
           <AppStatusBar />
           <RootNavigator />
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

@@ -14,6 +14,7 @@ import { createPlan } from '../api/plans';
 import type { CreatePlanRequest } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { useRequireOnline } from '../lib/offline';
 
 type SkillLevel = CreatePlanRequest['skill_level'];
 type TimeCommitment = CreatePlanRequest['time_commitment'];
@@ -38,6 +39,7 @@ export function NewPlanScreen({ navigation }: any) {
   const [timeCommitment, setTimeCommitment] = useState<TimeCommitment>('moderate');
   const [weeks, setWeeks] = useState('');
   const [days, setDays] = useState('');
+  const requireOnline = useRequireOnline();
 
   const mutation = useMutation({
     mutationFn: createPlan,
@@ -57,6 +59,8 @@ export function NewPlanScreen({ navigation }: any) {
       Alert.alert('Tell us a bit more', 'Describe what you want to learn in a sentence or two.');
       return;
     }
+
+    if (!requireOnline('generate a new plan')) return;
 
     const targetDays = (parseInt(weeks, 10) || 0) * 7 + (parseInt(days, 10) || 0);
     if (targetDays > 365) {

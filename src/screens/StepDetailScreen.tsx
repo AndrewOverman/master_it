@@ -19,6 +19,8 @@ import { getStep, setStepDueDate } from '../api/plans';
 import type { Plan, PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { useIsOnline, useRequireOnline } from '../lib/offline';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 function getYouTubeVideoId(url: string): string | null {
   const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -41,10 +43,28 @@ export function StepDetailScreen({ route, navigation }: any) {
   const videoPlayerWidth = windowWidth - 40;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isOnline = useIsOnline();
+  const requireOnline = useRequireOnline();
 
-  const { data: step, isLoading } = useQuery({
+  // The plan's own cached response already has this step's title,
+  // description, due date and video info — everything except
+  // `resources`, which only ever comes from getStep(). Seeding with it
+  // means a step opened offline still shows that much, even if getStep
+  // itself was never called for it before the connection dropped.
+  const cachedPlan = queryClient.getQueryData<Plan>(['plan', planId]);
+  const embeddedStep = cachedPlan?.steps.find((s) => s.id === stepId);
+  const planCachedAt = queryClient.getQueryState(['plan', planId])?.dataUpdatedAt;
+
+  const {
+    data: step,
+    isLoading,
+    isFetching,
+    dataUpdatedAt,
+  } = useQuery({
     queryKey: ['plan', planId, 'step', stepId],
     queryFn: () => getStep(planId, stepId),
+    initialData: embeddedStep,
+    initialDataUpdatedAt: planCachedAt,
   });
 
   useEffect(() => {
@@ -101,11 +121,22 @@ export function StepDetailScreen({ route, navigation }: any) {
   };
 
   const openDateEditor = () => {
+    if (!requireOnline('edit a due date')) return;
     setPendingDate(step?.due_date ? new Date(`${step.due_date}T00:00:00`) : new Date());
     setIsEditingDate(true);
   };
 
   if (isLoading || !step) {
+    if (!isOnline) {
+      return (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
+          <Text style={styles.noResourcesText}>
+            Can't load this step — you're offline and haven't opened it before.
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.textPrimary} />
@@ -116,12 +147,25 @@ export function StepDetailScreen({ route, navigation }: any) {
   const videoId = step.video_url ? getYouTubeVideoId(step.video_url) : null;
   const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
   const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1` : null;
+  // `resources` is only ever populated by getStep() — absent here means
+  // this step is showing the plan's embedded fallback, not a real fetch.
+  const resourcesLoaded = step.resources !== undefined;
   const resources = step.resources ?? [];
+  const syncedLabel = formatRelativeTime(dataUpdatedAt);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{step.title}</Text>
       <Text style={styles.description}>{step.description}</Text>
+
+      {!isOnline && (
+        <View style={styles.offlineRow}>
+          <Ionicons name="cloud-offline-outline" size={13} color={colors.textPlaceholder} />
+          <Text style={styles.offlineText}>
+            You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
+          </Text>
+        </View>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Due date</Text>
@@ -196,7 +240,11 @@ export function StepDetailScreen({ route, navigation }: any) {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Resources</Text>
-        {resources.length === 0 ? (
+        {!resourcesLoaded && !isOnline ? (
+          <Text style={styles.noResourcesText}>Resources aren't available offline.</Text>
+        ) : !resourcesLoaded && isFetching ? (
+          <ActivityIndicator size="small" color={colors.textMuted} style={styles.resourcesLoading} />
+        ) : resources.length === 0 ? (
           <Text style={styles.noResourcesText}>No resources found for this step yet.</Text>
         ) : (
           resources.map((resource) => (
@@ -225,10 +273,13 @@ export function StepDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: 24, gap: 10 },
     content: { padding: 20, paddingBottom: 40 },
     title: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
     description: { fontSize: 15, color: colors.textSecondary, marginTop: 10, lineHeight: 21 },
+    offlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+    offlineText: { flex: 1, fontSize: 12, color: colors.textPlaceholder },
+    resourcesLoading: { alignSelf: 'flex-start', marginTop: 4 },
     section: { marginTop: 24 },
     sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', marginBottom: 10 },
     dueDateRow: {
@@ -288,7 +339,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 13,
       backgroundColor: 'rgba(0, 0, 0, 0.45)',
     },
-    noResourcesText: { fontSize: 14, color: colors.textPlaceholder },
+    noResourcesText: { fontSize: 14, color: colors.textPlaceholder, textAlign: 'center' },
     resourceCard: {
       borderWidth: 1,
       borderColor: colors.border,
