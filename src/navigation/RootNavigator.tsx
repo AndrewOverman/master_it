@@ -219,20 +219,6 @@ function DrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.drawerDivider} />
         <View style={styles.drawerFooterContent}>
           <DrawerItem
-            label="Settings"
-            labelStyle={styles.drawerItemLabel}
-            icon={({ size, color }) => <Ionicons name="settings-outline" size={size} color={color} />}
-            activeTintColor={colors.textPrimary}
-            inactiveTintColor={colors.textSecondary}
-            activeBackgroundColor={colors.surfaceMuted}
-            pressColor={colors.surfaceMuted}
-            style={styles.drawerItem}
-            onPress={() => {
-              props.navigation.navigate('App', { screen: 'Settings' });
-              props.navigation.dispatch(DrawerActions.closeDrawer());
-            }}
-          />
-          <DrawerItem
             label="Account"
             labelStyle={styles.drawerItemLabel}
             icon={({ size, color }) => <Ionicons name="person-circle-outline" size={size} color={color} />}
@@ -243,6 +229,20 @@ function DrawerContent(props: DrawerContentComponentProps) {
             style={styles.drawerItem}
             onPress={() => {
               props.navigation.navigate('App', { screen: 'Account' });
+              props.navigation.dispatch(DrawerActions.closeDrawer());
+            }}
+          />
+          <DrawerItem
+            label="Settings"
+            labelStyle={styles.drawerItemLabel}
+            icon={({ size, color }) => <Ionicons name="settings-outline" size={size} color={color} />}
+            activeTintColor={colors.textPrimary}
+            inactiveTintColor={colors.textSecondary}
+            activeBackgroundColor={colors.surfaceMuted}
+            pressColor={colors.surfaceMuted}
+            style={styles.drawerItem}
+            onPress={() => {
+              props.navigation.navigate('App', { screen: 'Settings' });
               props.navigation.dispatch(DrawerActions.closeDrawer());
             }}
           />
