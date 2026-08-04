@@ -21,6 +21,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => null);
 
         $middleware->throttleApi();
+
+        // Railway (and most PaaS hosts) terminate TLS at a reverse proxy in
+        // front of the app, so trust the forwarded headers it sets — without
+        // this, Request::secure() and absolute URL generation are wrong in
+        // staging/production.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

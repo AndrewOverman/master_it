@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { getToken } from '../utils/tokenStorage';
 
-// Swap for your actual API base URL (env-driven in a real app)
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.yourapp.com';
+// Set per environment: locally via root .env, in EAS builds via eas.json build profiles.
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

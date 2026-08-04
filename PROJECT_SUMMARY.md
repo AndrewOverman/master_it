@@ -96,6 +96,30 @@ placeholder icon when a plan has none.
 - **Required secrets** (local-only, in `backend/.env`, gitignored):
   Supabase DB credentials, `ANTHROPIC_API_KEY`.
 
+## Environments (dev / staging / production)
+
+Three fully isolated environments, each with its own Supabase Postgres
+project and its own set of secrets — no shared infra between them.
+
+- **dev**: local only, as described above.
+- **staging**: Railway environment tracking the `main` branch. Vars
+  documented in `backend/.env.staging.example` (real values live in
+  Railway's dashboard, never in the repo).
+- **production**: Railway environment tracking a `production` branch.
+  Promoted deliberately by merging `main` → `production` via PR once
+  staging looks good. Vars documented in `backend/.env.production.example`.
+
+Each Railway environment runs two services from `backend/` (root
+directory): `api` (serves HTTP, runs migrations on deploy) and `worker`
+(`php artisan queue:work`, since plan generation depends on it exactly like
+local dev does).
+
+The mobile app is built per environment via `app.config.ts` + `eas.json`
+build profiles (`development` / `staging` / `production`), each with a
+distinct bundle identifier (`com.masterit.app.dev` / `.staging` / unsuffixed)
+so all three can be installed side by side on one device, and each pointed
+at that environment's `EXPO_PUBLIC_API_URL`.
+
 ## Git history
 
 Four commits so far: initial scaffold, login/register + iOS Simulator dev
