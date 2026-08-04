@@ -168,10 +168,10 @@ export function StepDetailScreen({ route, navigation }: any) {
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Due date</Text>
+        <Text style={styles.sectionLabel}>Aiming for</Text>
         <TouchableOpacity style={styles.dueDateRow} onPress={openDateEditor}>
           <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
-          <Text style={styles.dueDateText}>{step.due_date ? `Due ${step.due_date}` : 'Set a due date'}</Text>
+          <Text style={styles.dueDateText}>{step.due_date ? `Aiming for ${step.due_date}` : 'Set a target date'}</Text>
           <Ionicons name="pencil" size={14} color={colors.textPlaceholder} style={styles.dueDateEditIcon} />
         </TouchableOpacity>
 

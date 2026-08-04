@@ -24,6 +24,8 @@ export function GeneratingScreen({ route, navigation }: any) {
       navigation.replace('PlanDetail', { planId });
     } else if (plan.status === 'failed') {
       navigation.replace('PlanFailed', { planId, message: plan.error_message });
+    } else if (plan.status === 'rejected') {
+      navigation.replace('PlanRejected', { planId });
     }
   }, [plan, navigation, planId]);
 

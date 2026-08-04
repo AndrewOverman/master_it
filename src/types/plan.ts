@@ -1,7 +1,7 @@
 // Types matching the Laravel API response shapes.
 // Keep these in sync with your Laravel API Resources.
 
-export type PlanStatus = 'generating' | 'ready' | 'failed';
+export type PlanStatus = 'generating' | 'ready' | 'failed' | 'rejected';
 
 export interface StepResource {
   id: number;
@@ -40,6 +40,10 @@ export interface Plan {
   time_commitment: 'light' | 'moderate' | 'intensive' | null;
   target_days: number | null;
   created_at: string;
+  // Only present when the requester owns the plan — absent (undefined) on
+  // shared/featured views of someone else's plan.
+  share_token?: string | null;
+  share_token_expires_at?: string | null; // ISO datetime string, set 30 days out when share_token is minted
   steps: PlanStep[];
 }
 

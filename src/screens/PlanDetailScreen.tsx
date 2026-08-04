@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useLayoutEffect, useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPlan, setStepComplete, getRelatedPlans } from '../api/plans';
+import { getPlan, setStepComplete, getRelatedPlans, sharePlan } from '../api/plans';
 import { useCopyPlan } from '../hooks/useCopyPlan';
 import { PlanCard } from '../components/PlanCard';
+import { PlanLimitModal } from '../components/PlanLimitModal';
 import type { Plan, PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
@@ -34,38 +35,105 @@ export function PlanDetailScreen({ route, navigation }: any) {
     enabled: isOnline,
   });
 
-  const { copyMutation, handleCopyPress } = useCopyPlan(navigation);
+  const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
+    useCopyPlan(navigation);
+
+  const shareMutation = useMutation({
+    mutationFn: () => sharePlan(planId),
+    onSuccess: (token) => {
+      const url = `masterit://plans/shared/${token}`;
+      Share.share({ message: `Check out my plan on Master It: ${url}`, url });
+    },
+    onError: () => {
+      Alert.alert('Something went wrong', 'Could not create a share link. Please try again.');
+    },
+  });
+
+  const handleSharePress = () => {
+    if (!requireOnline('share this plan')) return;
+    shareMutation.mutate();
+  };
+
+  // Only a finished plan is shareable (mirrors the backend's own gate on
+  // POST /plans/{plan}/share), so the button only appears once ready.
+  useLayoutEffect(() => {
+    if (plan?.status !== 'ready') {
+      navigation.setOptions({ headerRight: undefined });
+      return;
+    }
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={handleSharePress}
+          disabled={shareMutation.isPending}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          {shareMutation.isPending ? (
+            <ActivityIndicator size="small" color={colors.textPrimary} />
+          ) : (
+            <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
+          )}
+        </TouchableOpacity>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, plan?.status, shareMutation.isPending, colors]);
+
+  const applyStepCompletion = (plan: Plan, stepId: number, completed: boolean): Plan => ({
+    ...plan,
+    steps: plan.steps.map((step) =>
+      step.id === stepId ? { ...step, completed_at: completed ? new Date().toISOString() : null } : step
+    ),
+  });
 
   const toggleMutation = useMutation({
     mutationFn: ({ stepId, completed }: { stepId: number; completed: boolean }) =>
       setStepComplete(planId, stepId, completed),
-    // Optimistic update so checking a step feels instant
+    // Optimistic update so checking a step feels instant. Also patches the
+    // ['plans'] list cache — the My Plans screen stays mounted underneath
+    // (React Navigation doesn't unmount screens on push), so without this
+    // its steps-complete count stays stale until something else refetches it.
     onMutate: async ({ stepId, completed }) => {
       await queryClient.cancelQueries({ queryKey: ['plan', planId] });
       const previousPlan = queryClient.getQueryData<Plan>(['plan', planId]);
+      const previousPlans = queryClient.getQueryData<Plan[]>(['plans']);
 
       queryClient.setQueryData<Plan>(['plan', planId], (old) =>
-        old
-          ? {
-              ...old,
-              steps: old.steps.map((step) =>
-                step.id === stepId
-                  ? { ...step, completed_at: completed ? new Date().toISOString() : null }
-                  : step
-              ),
-            }
-          : old
+        old ? applyStepCompletion(old, stepId, completed) : old
+      );
+      queryClient.setQueryData<Plan[]>(['plans'], (old) =>
+        old?.map((plan) => (plan.id === planId ? applyStepCompletion(plan, stepId, completed) : plan))
       );
 
-      return { previousPlan };
+      return { previousPlan, previousPlans };
     },
     onError: (_err, _vars, context) => {
       if (context?.previousPlan) {
         queryClient.setQueryData(['plan', planId], context.previousPlan);
       }
+      if (context?.previousPlans) {
+        queryClient.setQueryData(['plans'], context.previousPlans);
+      }
+    },
+    // Celebrate only on the transition into "every step done" — checking off
+    // a step in an already-complete plan (shouldn't normally happen, but
+    // just in case) shouldn't re-trigger it. The celebration overlay itself
+    // lives on PlansList, so hop back there with a flag for it to pick up.
+    onSuccess: (updatedStep, { stepId, completed }) => {
+      if (!completed) return;
+      const latestPlan = queryClient.getQueryData<Plan>(['plan', planId]);
+      if (!latestPlan) return;
+      const stepsAfter = latestPlan.steps.map((step) =>
+        step.id === stepId ? { ...step, completed_at: updatedStep.completed_at } : step
+      );
+      const allStepsComplete = stepsAfter.length > 0 && stepsAfter.every((step) => step.completed_at);
+      if (allStepsComplete) {
+        navigation.navigate('PlansList', { celebrate: true });
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
     },
   });
 
@@ -116,9 +184,9 @@ export function PlanDetailScreen({ route, navigation }: any) {
             <Text style={styles.stepDescription} numberOfLines={2}>
               {item.description}
             </Text>
-            {item.due_date && <Text style={styles.stepDueDate}>Due {item.due_date}</Text>}
+            {item.due_date && <Text style={styles.stepDueDate}>Aiming for {item.due_date}</Text>}
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.border} />
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
     );
@@ -126,6 +194,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
       <View style={styles.header}>
         <Text style={styles.planTitle}>{plan.title}</Text>
         <Text style={styles.progress}>
@@ -192,7 +261,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     checkboxChecked: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
     checkmark: { color: colors.background, fontSize: 13, fontWeight: '700' },
-    stepContent: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
+    stepContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
     stepText: { flex: 1 },
     stepTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
     stepTitleDone: { textDecorationLine: 'line-through', color: colors.textPlaceholder },

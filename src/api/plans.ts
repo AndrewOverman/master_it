@@ -67,6 +67,13 @@ export async function setPlanComplete(planId: number, completed: boolean): Promi
   return data;
 }
 
+// POST /api/v1/plans/{planId}/reset
+// Clears the plan's and all its steps' completed_at, so progress starts over.
+export async function resetPlanProgress(planId: number): Promise<Plan> {
+  const { data } = await apiClient.post<Plan>(`/api/v1/plans/${planId}/reset`);
+  return data;
+}
+
 // GET /api/v1/plans
 // List all of the user's plans, for a home/history screen later
 export async function listPlans(): Promise<Plan[]> {
@@ -96,5 +103,34 @@ export async function copyPlan(planId: number): Promise<Plan> {
 // by relevance. May come back empty if nothing genuinely overlaps.
 export async function getRelatedPlans(planId: number): Promise<Plan[]> {
   const { data } = await apiClient.get<Plan[]>(`/api/v1/plans/${planId}/related`);
+  return data;
+}
+
+// POST /api/v1/plans/{planId}/share
+// Owner-only. Mints a share token the first time it's called, then just
+// returns the same one on subsequent calls.
+export async function sharePlan(planId: number): Promise<string> {
+  const { data } = await apiClient.post<{ share_token: string }>(`/api/v1/plans/${planId}/share`);
+  return data.share_token;
+}
+
+// DELETE /api/v1/plans/{planId}/share
+// Owner-only. Revokes the share link — anyone still holding it gets a 404.
+export async function unsharePlan(planId: number): Promise<void> {
+  await apiClient.delete(`/api/v1/plans/${planId}/share`);
+}
+
+// GET /api/v1/plans/shared/{token}
+// Read-only preview of someone else's plan via their share link. Any
+// authenticated user can call this, not just the owner.
+export async function getSharedPlan(token: string): Promise<Plan> {
+  const { data } = await apiClient.get<Plan>(`/api/v1/plans/shared/${token}`);
+  return data;
+}
+
+// POST /api/v1/plans/shared/{token}/copy
+// Clones the shared plan (and its steps) into the caller's own plans.
+export async function copySharedPlan(token: string): Promise<Plan> {
+  const { data } = await apiClient.post<Plan>(`/api/v1/plans/shared/${token}/copy`);
   return data;
 }

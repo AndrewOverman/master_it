@@ -2,6 +2,7 @@
   "expo": {
     "name": "Master It",
     "slug": "master-it",
+    "scheme": "masterit",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",

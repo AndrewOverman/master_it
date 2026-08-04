@@ -135,6 +135,31 @@ class GeneratePlanSteps implements ShouldQueue
 
         The estimated_days across all steps should sum to approximately the
         requested total plan length.
+
+        ## Content policy
+
+        Most goals are fine, including ones that are edgy, physically risky,
+        or adjacent to regulated activities (e.g. home-brewing alcohol,
+        learning lockpicking as a hobby, training in a combat sport,
+        legal firearm marksmanship). Only decline when the goal itself is:
+
+        - ILLEGAL: the plan would walk someone through committing a crime
+          (making weapons or drugs, hacking into systems you don't own,
+          evading law enforcement, fraud, etc.) — not merely a topic that
+          touches on legality.
+        - OBSCENE OR SEXUAL: the goal is about producing sexual content
+          involving minors, or is generally pornographic/sexual in nature
+          rather than a legitimate skill or project.
+        - GRATUITOUSLY VIOLENT OR DISTURBING: the goal is centered on
+          gore, cruelty to people or animals, or self-harm rather than a
+          constructive activity.
+
+        If, and only if, the goal falls into one of those categories, call
+        the flag_unsupported_goal tool instead of create_plan_steps. Do not
+        lecture, moralize, or explain your reasoning at length — a short
+        internal category and reason is enough, since the app writes its
+        own user-facing message. When in doubt, prefer create_plan_steps —
+        false refusals of legitimate goals are worse than the rare miss.
         PROMPT;
 
     public function __construct(
@@ -143,7 +168,24 @@ class GeneratePlanSteps implements ShouldQueue
 
     public function handle(): void
     {
-        ['emoji' => $emoji, 'steps' => $steps] = $this->generatePlanFromClaude();
+        $result = $this->generatePlanFromClaude();
+
+        if ($result['type'] === 'rejected') {
+            Log::info('GeneratePlanSteps: goal flagged by content policy', [
+                'plan_id' => $this->plan->id,
+                'category' => $result['category'],
+                'reason' => $result['reason'],
+            ]);
+
+            $this->plan->update([
+                'status' => 'rejected',
+                'rejection_category' => $result['category'],
+            ]);
+
+            return;
+        }
+
+        ['emoji' => $emoji, 'steps' => $steps] = $result;
 
         $videoService = app(YouTubeVideoSearchService::class);
         $videosRemaining = self::MAX_VIDEOS_PER_PLAN;
@@ -210,7 +252,7 @@ class GeneratePlanSteps implements ShouldQueue
     }
 
     /**
-     * @return array{emoji: ?string, steps: array<int, array{title: string, description: string, estimated_days: int, needs_video: bool}>}
+     * @return array{type: 'steps', emoji: ?string, steps: array<int, array{title: string, description: string, estimated_days: int, needs_video: bool}>}|array{type: 'rejected', category: string, reason: ?string}
      */
     private function generatePlanFromClaude(): array
     {
@@ -268,8 +310,29 @@ class GeneratePlanSteps implements ShouldQueue
                         ],
                         'required' => ['emoji', 'steps'],
                     ],
+                ], [
+                    'name' => 'flag_unsupported_goal',
+                    'description' => 'Call this instead of create_plan_steps when the stated goal is illegal, obscene/sexual, or gratuitously violent per the content policy, rather than a legitimate (even if edgy) goal.',
+                    'input_schema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'category' => [
+                                'type' => 'string',
+                                'enum' => ['illegal', 'obscene', 'violent'],
+                            ],
+                            'reason' => [
+                                'type' => 'string',
+                                'description' => 'One short internal sentence explaining the call. Not shown to the user verbatim.',
+                            ],
+                        ],
+                        'required' => ['category', 'reason'],
+                    ],
                 ]],
-                'tool_choice' => ['type' => 'tool', 'name' => 'create_plan_steps'],
+                // "auto" rather than forcing create_plan_steps, so Claude can
+                // call flag_unsupported_goal instead when the content policy
+                // applies. Both tools are single-purpose, so "auto" won't
+                // produce a plain-text reply we'd have to handle separately.
+                'tool_choice' => ['type' => 'auto'],
                 // Only the per-plan specifics — short, and different every
                 // call, so it's never worth caching.
                 'messages' => [
@@ -290,6 +353,21 @@ class GeneratePlanSteps implements ShouldQueue
         ]);
 
         $toolUse = collect($response->json('content'))->firstWhere('type', 'tool_use');
+
+        if (! $toolUse) {
+            throw new RuntimeException('Anthropic response did not include a tool call.');
+        }
+
+        if ($toolUse['name'] === 'flag_unsupported_goal') {
+            $category = $toolUse['input']['category'] ?? 'other';
+
+            return [
+                'type' => 'rejected',
+                'category' => in_array($category, ['illegal', 'obscene', 'violent'], true) ? $category : 'other',
+                'reason' => $toolUse['input']['reason'] ?? null,
+            ];
+        }
+
         $steps = $toolUse['input']['steps'] ?? null;
         $emoji = $toolUse['input']['emoji'] ?? null;
 
@@ -303,7 +381,7 @@ class GeneratePlanSteps implements ShouldQueue
             throw new RuntimeException('Anthropic response did not include any usable steps.');
         }
 
-        return ['emoji' => is_string($emoji) ? $emoji : null, 'steps' => $steps];
+        return ['type' => 'steps', 'emoji' => is_string($emoji) ? $emoji : null, 'steps' => $steps];
     }
 
     private function buildPrompt(): string

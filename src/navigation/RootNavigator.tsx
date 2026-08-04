@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -8,6 +8,7 @@ import {
   NavigationContainer,
   DrawerActions,
   useNavigation,
+  useNavigationContainerRef,
 } from '@react-navigation/native';
 import {
   createNativeStackNavigator,
@@ -26,6 +27,7 @@ import { PlanDetailScreen } from '../screens/PlanDetailScreen';
 import { StepDetailScreen } from '../screens/StepDetailScreen';
 import { PlansListScreen } from '../screens/PlansListScreen';
 import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
+import { SharedPlanScreen } from '../screens/SharedPlanScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AccountScreen } from '../screens/AccountScreen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
@@ -40,10 +42,23 @@ export type AppStackParamList = {
   PlanDetail: { planId: number };
   StepDetail: { planId: number; stepId: number };
   PlanFailed: { planId: number; message: string | null };
-  PlansList: undefined;
+  PlanRejected: { planId: number };
+  PlansList: { celebrate?: boolean } | undefined;
+  SharedPlan: { token: string };
   Settings: undefined;
   Account: undefined;
 };
+
+// Pulls the token out of a masterit://plans/shared/{token} deep link (and
+// the equivalent https:// universal-link path, if that's added later).
+// Regex over the raw string rather than the URL constructor — RN/Hermes
+// support for URL parsing of custom schemes is inconsistent across
+// versions, and this only ever needs one path shape.
+function extractShareToken(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/plans\/shared\/([^/?#]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 export type RootStackParamList = {
   Login: undefined;
@@ -66,6 +81,28 @@ function PlanFailedScreen({ route, navigation }: any) {
       </Text>
       <Text style={styles.retryLink} onPress={() => navigation.navigate('NewPlan')}>
         Try again
+      </Text>
+    </View>
+  );
+}
+
+// Shown when the backend declines to generate a plan for the submitted
+// goal (Plan.status === 'rejected'). Deliberately separate from
+// PlanFailedScreen: "failed" implies a bug worth retrying as-is, this
+// implies a boundary — the copy stays neutral and non-accusatory, never
+// echoes the user's prompt or the model's internal category/reason back
+// at them, and always leaves a way forward.
+function PlanRejectedScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  return (
+    <View style={styles.failedContainer}>
+      <Text style={styles.failedTitle}>We can't build a plan for that</Text>
+      <Text style={styles.failedMessage}>
+        This request falls outside what Master It can help with. Try rephrasing your goal.
+      </Text>
+      <Text style={styles.retryLink} onPress={() => navigation.navigate('NewPlan')}>
+        Start a new plan
       </Text>
     </View>
   );
@@ -118,7 +155,9 @@ function AppHeader({ options }: NativeStackHeaderProps) {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {options.title}
         </Text>
-        <View style={styles.headerSlot} />
+        <View style={[styles.headerSlot, styles.headerRightSlot]}>
+          {options.headerRight ? options.headerRight({ canGoBack: navigation.canGoBack() }) : null}
+        </View>
       </View>
     </View>
   );
@@ -137,14 +176,24 @@ function AppStackNavigator() {
         component={GeneratingScreen}
         options={{ title: 'Building your plan', headerBackVisible: false, headerLeft: () => null }}
       />
-      <AppStack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: 'My Plan' }} />
+      <AppStack.Screen
+        name="PlanDetail"
+        component={PlanDetailScreen}
+        options={{ title: 'My Plan', headerLeft: () => <BackButton /> }}
+      />
       <AppStack.Screen
         name="StepDetail"
         component={StepDetailScreen}
         options={{ title: 'Step', headerLeft: () => <BackButton /> }}
       />
       <AppStack.Screen name="PlanFailed" component={PlanFailedScreen} options={{ title: 'Plan Failed' }} />
+      <AppStack.Screen name="PlanRejected" component={PlanRejectedScreen} options={{ title: 'Plan Not Available' }} />
       <AppStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'My Plans' }} />
+      <AppStack.Screen
+        name="SharedPlan"
+        component={SharedPlanScreen}
+        options={{ title: 'Shared Plan', headerLeft: () => <BackButton /> }}
+      />
 
       <AppStack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
       <AppStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
@@ -182,20 +231,6 @@ function DrawerContent(props: DrawerContentComponentProps) {
           style={styles.drawerItem}
           onPress={() => {
             props.navigation.navigate('App', { screen: 'Featured' });
-            props.navigation.dispatch(DrawerActions.closeDrawer());
-          }}
-        />
-        <DrawerItem
-          label="New Plan"
-          labelStyle={styles.drawerItemLabel}
-          icon={({ size, color }) => <Ionicons name="add-circle-outline" size={size} color={color} />}
-          activeTintColor={colors.textPrimary}
-          inactiveTintColor={colors.textSecondary}
-          activeBackgroundColor={colors.surfaceMuted}
-          pressColor={colors.surfaceMuted}
-          style={styles.drawerItem}
-          onPress={() => {
-            props.navigation.navigate('App', { screen: 'NewPlan' });
             props.navigation.dispatch(DrawerActions.closeDrawer());
           }}
         />
@@ -278,6 +313,51 @@ function RootNavigatorContent() {
   const { isAuthenticated } = useAuth();
   const { colors, colorScheme } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const navigationRef = useNavigationContainerRef();
+  const [pendingShareToken, setPendingShareToken] = useState<string | null>(null);
+
+  // Capture a share link whether it opens the app cold (getInitialURL) or
+  // the app is already running (the 'url' event) — either way just record
+  // the token; the effect below decides when it's safe to act on it.
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => {
+      const token = extractShareToken(url);
+      if (token) setPendingShareToken(token);
+    });
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      const token = extractShareToken(url);
+      if (token) setPendingShareToken(token);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Jump straight to the shared plan once there's both a token to act on
+  // and an authenticated navigator to act on it in — this is what makes a
+  // link tapped from the Login screen resume into the right place after
+  // sign-in, instead of just dropping the user on the home screen.
+  useEffect(() => {
+    if (!isAuthenticated || !pendingShareToken) return;
+    const token = pendingShareToken;
+
+    let cancelled = false;
+    const tryNavigate = () => {
+      if (cancelled) return;
+      if (navigationRef.isReady()) {
+        (navigationRef.navigate as any)('Main', {
+          screen: 'App',
+          params: { screen: 'SharedPlan', params: { token } },
+        });
+        setPendingShareToken(null);
+      } else {
+        setTimeout(tryNavigate, 100);
+      }
+    };
+    tryNavigate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, pendingShareToken, navigationRef]);
 
   const navigationTheme = useMemo(() => {
     const base = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
@@ -303,7 +383,7 @@ function RootNavigatorContent() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <RootStack.Screen name="Main" component={MainNavigator} />
@@ -338,6 +418,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 8,
     },
     headerSlot: { width: 60, alignItems: 'flex-start', justifyContent: 'center' },
+    headerRightSlot: { alignItems: 'flex-end' },
     hamburgerIcon: { fontSize: 30, color: colors.textPrimary },
     headerTitle: { flex: 1, textAlign: 'center', fontSize: 19, fontWeight: '700', color: colors.textPrimary },
     drawer: { width: 280 },

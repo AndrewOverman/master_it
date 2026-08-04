@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { listFeaturedPlans } from '../api/plans';
 import { useCopyPlan } from '../hooks/useCopyPlan';
 import { PlanCard } from '../components/PlanCard';
+import { PlanLimitModal } from '../components/PlanLimitModal';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
@@ -43,7 +44,8 @@ export function FeaturedPlansScreen({ navigation }: any) {
     enabled: isOnline,
   });
 
-  const { copyMutation, handleCopyPress } = useCopyPlan(navigation);
+  const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
+    useCopyPlan(navigation);
 
   const renderItem = ({ item }: { item: Plan }) => (
     <PlanCard
@@ -81,6 +83,7 @@ export function FeaturedPlansScreen({ navigation }: any) {
             renderItem={renderItem}
           />
         )}
+        <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
       </View>
     );
   }
@@ -104,25 +107,28 @@ export function FeaturedPlansScreen({ navigation }: any) {
   }
 
   return (
-    <FlatList
-      data={plans}
-      keyExtractor={(plan) => String(plan.id)}
-      contentContainerStyle={styles.list}
-      renderItem={renderItem}
-      refreshing={isRefetching}
-      onRefresh={refetch}
-      onEndReachedThreshold={0.5}
-      onEndReached={() => {
-        if (hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
+    <>
+      <FlatList
+        data={plans}
+        keyExtractor={(plan) => String(plan.id)}
+        contentContainerStyle={styles.list}
+        renderItem={renderItem}
+        refreshing={isRefetching}
+        onRefresh={refetch}
+        onEndReachedThreshold={0.5}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+          }
+        }}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <ActivityIndicator size="small" color={colors.textPrimary} style={styles.footerSpinner} />
+          ) : null
         }
-      }}
-      ListFooterComponent={
-        isFetchingNextPage ? (
-          <ActivityIndicator size="small" color={colors.textPrimary} style={styles.footerSpinner} />
-        ) : null
-      }
-    />
+      />
+      <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
+    </>
   );
 }
 

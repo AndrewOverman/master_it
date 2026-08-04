@@ -24,6 +24,14 @@ class PlanResource extends JsonResource
             'time_commitment' => $this->time_commitment,
             'target_days' => $this->target_days,
             'created_at' => $this->created_at?->toISOString(),
+            // Only the owner ever sees the raw token — a shared/featured
+            // viewer gets everything else in this resource but not the
+            // ability to re-derive or manage the share link itself.
+            'share_token' => $this->when($request->user()?->id === $this->user_id, $this->share_token),
+            'share_token_expires_at' => $this->when(
+                $request->user()?->id === $this->user_id,
+                $this->share_token_expires_at?->toISOString()
+            ),
             'steps' => PlanStepResource::collection($this->whenLoaded('steps')),
         ];
     }

@@ -1,24 +1,38 @@
-import React, { useMemo, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listPlans, setPlanComplete } from '../api/plans';
+import { listPlans, setPlanComplete, resetPlanProgress } from '../api/plans';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
+import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
 
-export function PlansListScreen({ navigation }: any) {
+export function PlansListScreen({ navigation, route }: any) {
   const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isOnline = useIsOnline();
   const requireOnline = useRequireOnline();
+  const insets = useSafeAreaInsets();
   // Keyed by plan id so the swiped-open row can be closed by the button
   // press that triggers its own action, without closing every other row.
   const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
+  const [showCelebration, setShowCelebration] = useState(false);
+
+  // PlanDetailScreen navigates here with `celebrate: true` when the last
+  // step of a plan is checked off. Clear the param right away so it doesn't
+  // re-fire on a later focus (e.g. coming back via the drawer).
+  useEffect(() => {
+    if (route.params?.celebrate) {
+      setShowCelebration(true);
+      navigation.setParams({ celebrate: undefined });
+    }
+  }, [route.params?.celebrate, navigation]);
 
   const {
     data: plans,
@@ -59,28 +73,62 @@ export function PlansListScreen({ navigation }: any) {
     },
   });
 
+  const resetMutation = useMutation({
+    mutationFn: (planId: number) => resetPlanProgress(planId),
+    // Write the server's response straight into both caches instead of just
+    // invalidating — invalidating alone leaves the plan detail screen's
+    // ['plan', planId] cache stale (still showing completed steps) until its
+    // own refetch resolves, which flashes the old state before correcting.
+    onSuccess: (updatedPlan) => {
+      queryClient.setQueryData<Plan[]>(['plans'], (old) =>
+        old?.map((plan) => (plan.id === updatedPlan.id ? updatedPlan : plan))
+      );
+      queryClient.setQueryData(['plan', updatedPlan.id], updatedPlan);
+    },
+  });
+
+  const newPlanFab = (
+    <TouchableOpacity
+      style={[styles.fab, { bottom: insets.bottom + 20 }]}
+      onPress={() => navigation.navigate('NewPlan')}
+      accessibilityLabel="Create plan"
+    >
+      <Ionicons name="add" size={22} color={colors.background} />
+      <Text style={styles.fabLabel}>Create Plan</Text>
+    </TouchableOpacity>
+  );
+
   if (isLoading) {
     if (!isOnline) {
       return (
-        <View style={styles.centered}>
-          <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
-          <Text style={styles.emptyText}>
-            You're offline. Plans you've opened before will show up here once they're cached.
-          </Text>
+        <View style={styles.container}>
+          <View style={styles.centered}>
+            <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
+            <Text style={styles.emptyText}>
+              You're offline. Plans you've opened before will show up here once they're cached.
+            </Text>
+          </View>
+          {newPlanFab}
         </View>
       );
     }
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
+      <View style={styles.container}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.textPrimary} />
+        </View>
+        {newPlanFab}
       </View>
     );
   }
 
   if (!plans || plans.length === 0) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyText}>You haven't created any plans yet.</Text>
+      <View style={styles.container}>
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>You haven't created any plans yet.</Text>
+        </View>
+        {newPlanFab}
       </View>
     );
   }
@@ -95,18 +143,41 @@ export function PlansListScreen({ navigation }: any) {
 
     const closeSwipeable = () => swipeableRefs.current.get(item.id)?.close();
 
+    const handleReset = () => {
+      closeSwipeable();
+      if (!requireOnline("reset a plan's progress")) return;
+      Alert.alert(
+        'Reset progress?',
+        `This will mark all of "${item.title}"'s steps as incomplete. This can't be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reset',
+            style: 'destructive',
+            onPress: () => resetMutation.mutate(item.id),
+          },
+        ]
+      );
+    };
+
     const renderRightActions = () => (
-      <TouchableOpacity
-        style={[styles.swipeAction, isCompleted ? styles.swipeActionUndo : styles.swipeActionComplete]}
-        onPress={() => {
-          closeSwipeable();
-          if (!requireOnline('mark a plan complete')) return;
-          completeMutation.mutate({ planId: item.id, completed: !isCompleted });
-        }}
-      >
-        <Ionicons name={isCompleted ? 'arrow-undo' : 'checkmark'} size={22} color={colors.background} />
-        <Text style={styles.swipeActionText}>{isCompleted ? 'Undo' : 'Complete'}</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row' }}>
+        <TouchableOpacity style={[styles.swipeAction, styles.swipeActionReset]} onPress={handleReset}>
+          <Ionicons name="refresh" size={22} color={colors.background} />
+          <Text style={styles.swipeActionText}>Reset</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.swipeAction, isCompleted ? styles.swipeActionUndo : styles.swipeActionComplete]}
+          onPress={() => {
+            closeSwipeable();
+            if (!requireOnline('mark a plan complete')) return;
+            completeMutation.mutate({ planId: item.id, completed: !isCompleted });
+          }}
+        >
+          <Ionicons name={isCompleted ? 'arrow-undo' : 'checkmark'} size={22} color={colors.background} />
+          <Text style={styles.swipeActionText}>{isCompleted ? 'Undo' : 'Complete'}</Text>
+        </TouchableOpacity>
+      </View>
     );
 
     return (
@@ -146,30 +217,53 @@ export function PlansListScreen({ navigation }: any) {
   };
 
   return (
-    <FlatList
-      data={plans}
-      keyExtractor={(plan) => String(plan.id)}
-      contentContainerStyle={styles.list}
-      renderItem={renderItem}
-      refreshing={isRefetching}
-      onRefresh={refetch}
-      ListHeaderComponent={
-        !isOnline ? (
-          <View style={styles.offlineBanner}>
-            <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.offlineBannerText}>
-              You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
-            </Text>
-          </View>
-        ) : null
-      }
-    />
+    <View style={styles.container}>
+      <FlatList
+        data={plans}
+        keyExtractor={(plan) => String(plan.id)}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
+        renderItem={renderItem}
+        refreshing={isRefetching}
+        onRefresh={refetch}
+        ListHeaderComponent={
+          !isOnline ? (
+            <View style={styles.offlineBanner}>
+              <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
+              <Text style={styles.offlineBannerText}>
+                You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+      {newPlanFab}
+      <PlanCompleteOverlay visible={showCelebration} onDismiss={() => setShowCelebration(false)} />
+    </View>
   );
 }
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background, gap: 10 },
+    fab: {
+      position: 'absolute',
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 52,
+      paddingHorizontal: 22,
+      borderRadius: 26,
+      backgroundColor: colors.textPrimary,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+    fabLabel: { color: colors.background, fontSize: 15, fontWeight: '600' },
     emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
     list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
     offlineBanner: {
@@ -212,5 +306,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     swipeActionComplete: { backgroundColor: colors.success },
     swipeActionUndo: { backgroundColor: colors.textMuted },
+    swipeActionReset: { backgroundColor: colors.destructive },
     swipeActionText: { color: colors.background, fontSize: 12, fontWeight: '600', marginTop: 4 },
   });
