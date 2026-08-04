@@ -99,7 +99,7 @@ placeholder icon when a plan has none.
 ## Environments (dev / staging / production)
 
 - **dev**: local only, as described above. Backed by a Supabase project
-  (`aws-0-us-east-2`) that is **also used by staging** — a deliberate
+  (`aws-0-ca-central-1`) that is **also used by staging** — a deliberate
   deviation from full isolation, so a destructive local action (e.g.
   `migrate:fresh`, a bad test run) can affect staging data.
 - **staging**: Railway environment tracking the `main` branch. Shares dev's
@@ -109,13 +109,43 @@ placeholder icon when a plan has none.
 - **production**: Railway environment tracking a `production` branch.
   Promoted deliberately by merging `main` → `production` via PR once
   staging looks good. Backed by its own, fully isolated Supabase project
-  (`aws-0-ca-central-1`) — no local or staging action can touch it. Vars
+  (`aws-0-us-east-2`) — no local or staging action can touch it. Vars
   documented in `backend/.env.production.example`.
 
 Each Railway environment runs two services from `backend/` (root
-directory): `api` (serves HTTP, runs migrations on deploy) and `worker`
-(`php artisan queue:work`, since plan generation depends on it exactly like
-local dev does).
+directory): `api` and `worker`. Both were nontrivial to get stable on
+Railway — worth reading before touching either again:
+
+- **`api` start command**:
+  `php artisan config:cache && php artisan migrate --force && frankenphp run --config /Caddyfile`.
+  Do **not** use `php artisan serve` here — it's Laravel's dev-only server
+  (single-threaded, no supervision) and was intermittently dying under
+  Railway's healthchecks. Railway's Nixpacks builder already generates a
+  correct `/Caddyfile` for this app on top of the `dunglas/frankenphp`
+  image; use it instead of hand-written serve flags.
+- **`worker` start command**:
+  `php artisan config:clear && php artisan queue:work --tries=3 --max-time=3600`.
+  The `config:clear` guards against a stale `bootstrap/cache/config.php`
+  baked in at build time silently overriding a Railway variable you just
+  fixed — cheap insurance, though in practice our worker crash-loop turned
+  out to be caused by something else (below).
+- **Explicit `PORT` variable**: Railway's public-domain routing (the
+  "target port" in Settings → Networking) can drift out of sync with
+  whatever port the app actually binds to, especially after changing the
+  start command. If health checks pass internally but the public domain
+  502s with `x-railway-fallback: true`, set `PORT` explicitly as a
+  variable on the service to match the Networking target port rather than
+  relying on auto-detection.
+- **Supabase pooler port matters**: use the **session pooler, port 5432**,
+  not the transaction pooler on **6543**. Transaction-mode pooling doesn't
+  support PDO's prepared-statement caching correctly and produces
+  `SQLSTATE[26000]: prepared statement "pdo_stmt_..." does not exist`
+  errors under normal use — this is what actually broke `worker`, not the
+  config-cache issue above.
+- **Logging**: set `LOG_CHANNEL=stderr` in Railway (unlike local dev's
+  `stack`/`single`, which writes to a file inside the container that
+  Railway's log viewer never sees). Without it, a `500` just shows
+  `{"message":"Server Error"}` with no way to see why.
 
 The mobile app is built per environment via `app.config.ts` + `eas.json`
 build profiles (`development` / `staging` / `production`), each with a
