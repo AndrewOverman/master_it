@@ -98,16 +98,19 @@ placeholder icon when a plan has none.
 
 ## Environments (dev / staging / production)
 
-Three fully isolated environments, each with its own Supabase Postgres
-project and its own set of secrets — no shared infra between them.
-
-- **dev**: local only, as described above.
-- **staging**: Railway environment tracking the `main` branch. Vars
-  documented in `backend/.env.staging.example` (real values live in
-  Railway's dashboard, never in the repo).
+- **dev**: local only, as described above. Backed by a Supabase project
+  (`aws-0-us-east-2`) that is **also used by staging** — a deliberate
+  deviation from full isolation, so a destructive local action (e.g.
+  `migrate:fresh`, a bad test run) can affect staging data.
+- **staging**: Railway environment tracking the `main` branch. Shares dev's
+  Supabase project (see above). Vars documented in
+  `backend/.env.staging.example` (real values live in Railway's dashboard,
+  never in the repo).
 - **production**: Railway environment tracking a `production` branch.
   Promoted deliberately by merging `main` → `production` via PR once
-  staging looks good. Vars documented in `backend/.env.production.example`.
+  staging looks good. Backed by its own, fully isolated Supabase project
+  (`aws-0-ca-central-1`) — no local or staging action can touch it. Vars
+  documented in `backend/.env.production.example`.
 
 Each Railway environment runs two services from `backend/` (root
 directory): `api` (serves HTTP, runs migrations on deploy) and `worker`
