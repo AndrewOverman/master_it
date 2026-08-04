@@ -133,7 +133,7 @@ class PlanSharingTest extends TestCase
         $this->actingAs($owner)->getJson("/api/v1/plans/{$plan->id}")
             ->assertJsonPath('share_token', 'secret-token');
 
-        $this->actingAs($viewer)->getJson("/api/v1/plans/shared/secret-token")
+        $this->actingAs($viewer)->getJson('/api/v1/plans/shared/secret-token')
             ->assertJsonMissingPath('share_token');
     }
 
