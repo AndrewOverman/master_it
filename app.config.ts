@@ -40,6 +40,11 @@ export default (_context: ConfigContext): ExpoConfig => ({
   android: {
     package: bundleId,
   },
+  extra: {
+    eas: {
+      projectId: '524638a0-4790-4dba-a379-9d3cd6516708',
+    },
+  },
   plugins: [
     'expo-asset',
     'expo-font',
