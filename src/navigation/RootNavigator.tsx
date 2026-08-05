@@ -21,6 +21,8 @@ import {
   type DrawerContentComponentProps,
 } from '@react-navigation/drawer';
 import { LoginScreen } from '../screens/LoginScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
+import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { NewPlanScreen } from '../screens/NewPlanScreen';
 import { GeneratingScreen } from '../screens/GeneratingScreen';
 import { PlanDetailScreen } from '../screens/PlanDetailScreen';
@@ -61,8 +63,29 @@ function extractShareToken(url: string | null): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+// Pulls token + email out of a masterit://reset-password?token=...&email=...
+// link (see AppServiceProvider::boot()'s ResetPassword::createUrlUsing on
+// the backend). Same manual-parse approach as extractShareToken, for the
+// same reason — no URL constructor for custom schemes.
+function extractResetParams(url: string | null): { token: string; email: string } | null {
+  if (!url) return null;
+  const match = url.match(/\/\/reset-password\?(.+)/);
+  if (!match) return null;
+
+  const params = Object.fromEntries(
+    match[1].split('&').map((pair) => {
+      const [key, value = ''] = pair.split('=');
+      return [key, decodeURIComponent(value)];
+    })
+  );
+
+  return params.token && params.email ? { token: params.token, email: params.email } : null;
+}
+
 export type RootStackParamList = {
   Login: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token: string; email: string };
   Main: undefined;
 };
 
@@ -316,19 +339,22 @@ function RootNavigatorContent() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigationRef = useNavigationContainerRef();
   const [pendingShareToken, setPendingShareToken] = useState<string | null>(null);
+  const [pendingResetParams, setPendingResetParams] = useState<{ token: string; email: string } | null>(
+    null
+  );
 
-  // Capture a share link whether it opens the app cold (getInitialURL) or
-  // the app is already running (the 'url' event) — either way just record
-  // the token; the effect below decides when it's safe to act on it.
+  // Capture a share or reset-password link whether it opens the app cold
+  // (getInitialURL) or the app is already running (the 'url' event) — either
+  // way just record it; the effects below decide when it's safe to act on it.
   useEffect(() => {
-    Linking.getInitialURL().then((url) => {
-      const token = extractShareToken(url);
-      if (token) setPendingShareToken(token);
-    });
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      const token = extractShareToken(url);
-      if (token) setPendingShareToken(token);
-    });
+    const handleUrl = (url: string | null) => {
+      const shareToken = extractShareToken(url);
+      if (shareToken) setPendingShareToken(shareToken);
+      const resetParams = extractResetParams(url);
+      if (resetParams) setPendingResetParams(resetParams);
+    };
+    Linking.getInitialURL().then(handleUrl);
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => subscription.remove();
   }, []);
 
@@ -360,6 +386,31 @@ function RootNavigatorContent() {
     };
   }, [isAuthenticated, pendingShareToken, navigationRef]);
 
+  // Mirror of the effect above for reset-password links, but gated on
+  // isAuthenticated === false rather than true — whoever tapped this link is
+  // by definition logged out (that's why they requested it), and
+  // ResetPassword only exists on the unauthenticated stack.
+  useEffect(() => {
+    if (isAuthenticated !== false || !pendingResetParams) return;
+    const params = pendingResetParams;
+
+    let cancelled = false;
+    const tryNavigate = () => {
+      if (cancelled) return;
+      if (navigationRef.isReady()) {
+        (navigationRef.navigate as any)('ResetPassword', params);
+        setPendingResetParams(null);
+      } else {
+        setTimeout(tryNavigate, 100);
+      }
+    };
+    tryNavigate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, pendingResetParams, navigationRef]);
+
   const navigationTheme = useMemo(() => {
     const base = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
     return {
@@ -385,7 +436,11 @@ function RootNavigatorContent() {
         {isAuthenticated ? (
           <RootStack.Screen name="Main" component={MainNavigator} />
         ) : (
-          <RootStack.Screen name="Login" component={LoginScreen} />
+          <>
+            <RootStack.Screen name="Login" component={LoginScreen} />
+            <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <RootStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
         )}
       </RootStack.Navigator>
     </NavigationContainer>

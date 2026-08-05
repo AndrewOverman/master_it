@@ -54,4 +54,12 @@ return [
         'webhook_secret' => env('REVENUECAT_WEBHOOK_SECRET'),
     ],
 
+    'mobile' => [
+        // Must match the `scheme` for whichever app.config.ts APP_VARIANT
+        // built the app talking to this backend (development/staging/
+        // production — see eas.json), so password-reset emails deep-link
+        // into the right build instead of one that isn't installed.
+        'scheme' => env('MOBILE_APP_SCHEME', 'masterit'),
+    ],
+
 ];

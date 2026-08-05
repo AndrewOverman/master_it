@@ -32,6 +32,22 @@ export async function logout(): Promise<void> {
   await apiClient.post('/api/v1/logout');
 }
 
+// POST /api/v1/forgot-password
+// Always resolves — the backend gives the same response whether or not the
+// email is registered, so there's nothing for a caller to branch on.
+export async function forgotPassword(payload: { email: string }): Promise<void> {
+  await apiClient.post('/api/v1/forgot-password', payload);
+}
+
+// POST /api/v1/reset-password
+export async function resetPassword(payload: {
+  email: string;
+  token: string;
+  password: string;
+}): Promise<void> {
+  await apiClient.post('/api/v1/reset-password', payload);
+}
+
 // GET /api/v1/user
 export async function getCurrentUser(): Promise<AuthUser> {
   const { data } = await apiClient.get<AuthUser>('/api/v1/user');

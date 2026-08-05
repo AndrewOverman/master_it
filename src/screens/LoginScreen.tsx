@@ -6,9 +6,22 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { Button, TextField } from '../components/ui';
+import { getApiErrorMessage } from '../utils/apiError';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+
+function getAuthErrorMessage(error: unknown, mode: 'login' | 'register'): string {
+  const fallback =
+    mode === 'login'
+      ? 'Check your email and password and try again.'
+      : 'Could not create an account. That email may already be taken.';
+
+  return getApiErrorMessage(error, fallback);
+}
 
 export function LoginScreen({ navigation }: any) {
-  const { signIn } = useAuth();
+  const { signIn, sessionExpired } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -24,13 +37,8 @@ export function LoginScreen({ navigation }: any) {
       // no explicit navigation call needed.
       await signIn(data.token);
     },
-    onError: () => {
-      Alert.alert(
-        'Something went wrong',
-        mode === 'login'
-          ? 'Check your email and password and try again.'
-          : 'Could not create an account. That email may already be taken.'
-      );
+    onError: (error) => {
+      Alert.alert('Something went wrong', getAuthErrorMessage(error, mode));
     },
   });
 
@@ -52,6 +60,12 @@ export function LoginScreen({ navigation }: any) {
         <Text style={styles.subheading}>
           {mode === 'login' ? 'Log in to build and track your plans.' : 'Sign up to get started.'}
         </Text>
+
+        {sessionExpired && (
+          <View style={styles.sessionBanner}>
+            <Text style={styles.sessionBannerText}>Your session expired — log back in</Text>
+          </View>
+        )}
 
         {mode === 'register' && (
           <TextField
@@ -79,6 +93,16 @@ export function LoginScreen({ navigation }: any) {
           editable={!mutation.isPending}
         />
 
+        {mode === 'login' && (
+          <TouchableOpacity
+            style={styles.forgotPasswordLink}
+            onPress={() => navigation.navigate('ForgotPassword')}
+            disabled={mutation.isPending}
+          >
+            <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+          </TouchableOpacity>
+        )}
+
         <Button
           label={mode === 'login' ? 'Log In' : 'Sign Up'}
           onPress={handleSubmit}
@@ -105,6 +129,21 @@ const createStyles = (colors: ThemeColors) =>
     content: { flex: 1, justifyContent: 'center', padding: 24 },
     heading: { fontSize: 26, fontWeight: '700', color: colors.textPrimary },
     subheading: { fontSize: 15, color: colors.textMuted, marginTop: 6, marginBottom: 28 },
+    sessionBanner: {
+      backgroundColor: colors.accentMuted,
+      borderRadius: radius.md,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.lg,
+    },
+    sessionBannerText: {
+      color: colors.accent,
+      fontSize: typography.label.fontSize,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    forgotPasswordLink: { alignItems: 'flex-end', marginBottom: spacing.lg },
+    forgotPasswordText: { fontSize: typography.label.fontSize, color: colors.accent, fontWeight: '600' },
     toggleButton: { marginTop: 20, alignItems: 'center' },
     toggleText: { fontSize: 14, color: colors.accent, fontWeight: '600' },
   });

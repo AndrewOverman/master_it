@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -42,6 +43,25 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('register', function (Request $request) {
             return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // Password::sendResetLink() already throttles re-sends to the same
+        // email every 60s on its own — this is the outer guard against one
+        // IP working through many different emails, so it's keyed by IP
+        // alone rather than email+IP like `login`.
+        RateLimiter::for('forgot-password', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // The default notification links to route('password.reset', ...),
+        // which doesn't exist here — this is an API-only backend with no
+        // web frontend. Point it at the mobile app's deep link instead,
+        // the same masterit://... scheme SharedPlan links already use.
+        ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
+            $scheme = config('services.mobile.scheme');
+            $email = urlencode($notifiable->getEmailForPasswordReset());
+
+            return "{$scheme}://reset-password?token={$token}&email={$email}";
         });
     }
 }
