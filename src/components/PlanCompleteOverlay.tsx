@@ -3,6 +3,7 @@ import { Animated, Dimensions, Easing, StyleSheet, Text, TouchableOpacity, View 
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { shadows } from '../theme/shadows';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CONFETTI_COLORS = ['#FDE68A', '#FCA5A5', '#93C5FD', '#6EE7B7', '#C4B5FD', '#FDBA74', '#F472B6'];
@@ -179,11 +180,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 32,
       paddingHorizontal: 24,
       alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 12,
-      elevation: 8,
+      ...shadows.card,
     },
     dismissButton: {
       position: 'absolute',

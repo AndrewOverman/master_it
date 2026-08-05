@@ -1,18 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCurrentUser, updateProfile } from '../api/auth';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { Button, Spinner, TextField } from '../components/ui';
 
 // Prefers the specific field validation message (e.g. "The email has
 // already been taken.") over Laravel's generic top-level message.
@@ -95,29 +87,16 @@ export function AccountScreen() {
   };
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      </View>
-    );
+    return <Spinner fullScreen />;
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.sectionTitle}>Profile</Text>
 
-      <Text style={styles.fieldLabel}>Name</Text>
-      <TextInput
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="words"
-        editable={!profileMutation.isPending}
-      />
-
-      <Text style={styles.fieldLabel}>Email</Text>
-      <TextInput
-        style={styles.input}
+      <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" editable={!profileMutation.isPending} />
+      <TextField
+        label="Email"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -126,60 +105,35 @@ export function AccountScreen() {
         editable={!profileMutation.isPending}
       />
 
-      <TouchableOpacity
-        style={[styles.button, profileMutation.isPending && styles.buttonDisabled]}
-        onPress={handleSaveProfile}
-        disabled={profileMutation.isPending}
-      >
-        {profileMutation.isPending ? (
-          <ActivityIndicator color={colors.background} />
-        ) : (
-          <Text style={styles.buttonText}>Save Changes</Text>
-        )}
-      </TouchableOpacity>
+      <Button label="Save Changes" onPress={handleSaveProfile} loading={profileMutation.isPending} />
 
       <View style={styles.divider} />
 
       <Text style={styles.sectionTitle}>Change Password</Text>
 
-      <Text style={styles.fieldLabel}>Current Password</Text>
-      <TextInput
-        style={styles.input}
+      <TextField
+        label="Current Password"
         value={currentPassword}
         onChangeText={setCurrentPassword}
         secureTextEntry
         editable={!passwordMutation.isPending}
       />
-
-      <Text style={styles.fieldLabel}>New Password</Text>
-      <TextInput
-        style={styles.input}
+      <TextField
+        label="New Password"
         value={newPassword}
         onChangeText={setNewPassword}
         secureTextEntry
         editable={!passwordMutation.isPending}
       />
-
-      <Text style={styles.fieldLabel}>Confirm New Password</Text>
-      <TextInput
-        style={styles.input}
+      <TextField
+        label="Confirm New Password"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
         editable={!passwordMutation.isPending}
       />
 
-      <TouchableOpacity
-        style={[styles.button, passwordMutation.isPending && styles.buttonDisabled]}
-        onPress={handleUpdatePassword}
-        disabled={passwordMutation.isPending}
-      >
-        {passwordMutation.isPending ? (
-          <ActivityIndicator color={colors.background} />
-        ) : (
-          <Text style={styles.buttonText}>Update Password</Text>
-        )}
-      </TouchableOpacity>
+      <Button label="Update Password" onPress={handleUpdatePassword} loading={passwordMutation.isPending} />
     </ScrollView>
   );
 }
@@ -187,27 +141,7 @@ export function AccountScreen() {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     content: { padding: 20, width: '100%', maxWidth: 520, alignSelf: 'center' },
     sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 16 },
-    fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 },
-    input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      padding: 14,
-      fontSize: 16,
-      color: colors.textPrimary,
-      marginBottom: 14,
-    },
-    button: {
-      backgroundColor: colors.textPrimary,
-      borderRadius: 12,
-      paddingVertical: 16,
-      alignItems: 'center',
-      marginTop: 4,
-    },
-    buttonDisabled: { opacity: 0.6 },
-    buttonText: { color: colors.background, fontSize: 16, fontWeight: '600' },
     divider: { height: 1, backgroundColor: colors.borderMuted, marginVertical: 28 },
   });

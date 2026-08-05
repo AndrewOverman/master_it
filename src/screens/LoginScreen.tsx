@@ -1,20 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { login, register } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { Button, TextField } from '../components/ui';
 
 export function LoginScreen({ navigation }: any) {
   const { signIn } = useAuth();
@@ -63,20 +54,16 @@ export function LoginScreen({ navigation }: any) {
         </Text>
 
         {mode === 'register' && (
-          <TextInput
-            style={styles.input}
+          <TextField
             placeholder="Name"
-            placeholderTextColor={colors.textPlaceholder}
             value={name}
             onChangeText={setName}
             autoCapitalize="words"
             editable={!mutation.isPending}
           />
         )}
-        <TextInput
-          style={styles.input}
+        <TextField
           placeholder="Email"
-          placeholderTextColor={colors.textPlaceholder}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -84,27 +71,19 @@ export function LoginScreen({ navigation }: any) {
           keyboardType="email-address"
           editable={!mutation.isPending}
         />
-        <TextInput
-          style={styles.input}
+        <TextField
           placeholder="Password"
-          placeholderTextColor={colors.textPlaceholder}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           editable={!mutation.isPending}
         />
 
-        <TouchableOpacity
-          style={[styles.submitButton, mutation.isPending && styles.submitButtonDisabled]}
+        <Button
+          label={mode === 'login' ? 'Log In' : 'Sign Up'}
           onPress={handleSubmit}
-          disabled={mutation.isPending}
-        >
-          {mutation.isPending ? (
-            <ActivityIndicator color={colors.background} />
-          ) : (
-            <Text style={styles.submitButtonText}>{mode === 'login' ? 'Log In' : 'Sign Up'}</Text>
-          )}
-        </TouchableOpacity>
+          loading={mutation.isPending}
+        />
 
         <TouchableOpacity
           style={styles.toggleButton}
@@ -126,24 +105,6 @@ const createStyles = (colors: ThemeColors) =>
     content: { flex: 1, justifyContent: 'center', padding: 24 },
     heading: { fontSize: 26, fontWeight: '700', color: colors.textPrimary },
     subheading: { fontSize: 15, color: colors.textMuted, marginTop: 6, marginBottom: 28 },
-    input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      padding: 14,
-      fontSize: 16,
-      color: colors.textPrimary,
-      marginBottom: 14,
-    },
-    submitButton: {
-      backgroundColor: colors.textPrimary,
-      borderRadius: 12,
-      paddingVertical: 16,
-      alignItems: 'center',
-      marginTop: 8,
-    },
-    submitButtonDisabled: { opacity: 0.6 },
-    submitButtonText: { color: colors.background, fontSize: 16, fontWeight: '600' },
     toggleButton: { marginTop: 20, alignItems: 'center' },
-    toggleText: { fontSize: 14, color: colors.link, fontWeight: '600' },
+    toggleText: { fontSize: 14, color: colors.accent, fontWeight: '600' },
   });

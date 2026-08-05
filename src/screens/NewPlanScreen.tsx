@@ -1,20 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { createPlan } from '../api/plans';
 import type { CreatePlanRequest } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useRequireOnline } from '../lib/offline';
+import { Button, TextField } from '../components/ui';
 
 type SkillLevel = CreatePlanRequest['skill_level'];
 type TimeCommitment = CreatePlanRequest['time_commitment'];
@@ -31,6 +23,17 @@ const TIME_COMMITMENTS: { label: string; value: TimeCommitment }[] = [
   { label: 'Several hrs/day', value: 'intensive' },
 ];
 
+// Short label for the chip vs. the fuller sentence it fills in — keeps the
+// row scannable while still handing the model a well-formed prompt.
+const EXAMPLE_PROMPTS: { label: string; prompt: string }[] = [
+  { label: 'Learn guitar chords', prompt: 'I want to learn to play basic chords on guitar' },
+  { label: 'Train for a 5K', prompt: 'I want to train for a 5K race' },
+  { label: 'Learn conversational Spanish', prompt: 'I want to learn conversational Spanish' },
+  { label: 'Pass the CPA exam', prompt: 'I want to study for and pass the CPA exam' },
+  { label: 'Get better at public speaking', prompt: 'I want to get better at public speaking' },
+  { label: 'Learn to cook Italian food', prompt: 'I want to learn to cook classic Italian dishes' },
+];
+
 export function NewPlanScreen({ navigation }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -40,6 +43,12 @@ export function NewPlanScreen({ navigation }: any) {
   const [weeks, setWeeks] = useState('');
   const [days, setDays] = useState('');
   const requireOnline = useRequireOnline();
+  const promptInputRef = useRef<TextInput>(null);
+
+  const handleExamplePress = (example: string) => {
+    setPrompt(example);
+    promptInputRef.current?.focus();
+  };
 
   const mutation = useMutation({
     mutationFn: createPlan,
@@ -83,10 +92,24 @@ export function NewPlanScreen({ navigation }: any) {
         Describe a skill or goal. We'll build you a step-by-step plan.
       </Text>
 
-      <TextInput
-        style={styles.promptInput}
+      <Text style={styles.exampleLabel}>Need an idea? Try one of these</Text>
+      <View style={styles.exampleRow}>
+        {EXAMPLE_PROMPTS.map((example) => (
+          <TouchableOpacity
+            key={example.label}
+            style={styles.exampleChip}
+            onPress={() => handleExamplePress(example.prompt)}
+            disabled={mutation.isPending}
+          >
+            <Text style={styles.exampleChipText}>{example.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <TextField
+        ref={promptInputRef}
+        containerStyle={styles.promptField}
         placeholder="e.g. I want to learn to play basic chords on guitar"
-        placeholderTextColor={colors.textPlaceholder}
         multiline
         value={prompt}
         onChangeText={setPrompt}
@@ -172,17 +195,7 @@ export function NewPlanScreen({ navigation }: any) {
       </View>
       <Text style={styles.durationHint}>Leave blank for a default ~30-day plan.</Text>
 
-      <TouchableOpacity
-        style={[styles.submitButton, mutation.isPending && styles.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={mutation.isPending}
-      >
-        {mutation.isPending ? (
-          <ActivityIndicator color={colors.background} />
-        ) : (
-          <Text style={styles.submitButtonText}>Build my plan</Text>
-        )}
-      </TouchableOpacity>
+      <Button label="Build my plan" onPress={handleSubmit} loading={mutation.isPending} style={styles.submitButton} />
     </ScrollView>
   );
 }
@@ -193,17 +206,16 @@ const createStyles = (colors: ThemeColors) =>
     content: { padding: 20, paddingTop: 40, width: '100%', maxWidth: 520, alignSelf: 'center' },
     heading: { fontSize: 26, fontWeight: '700', color: colors.textPrimary },
     subheading: { fontSize: 15, color: colors.textMuted, marginTop: 6, marginBottom: 24 },
-    promptInput: {
-      minHeight: 100,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      padding: 14,
-      fontSize: 16,
-      color: colors.textPrimary,
-      textAlignVertical: 'top',
-      marginBottom: 24,
+    exampleLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 },
+    exampleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+    exampleChip: {
+      paddingVertical: 7,
+      paddingHorizontal: 13,
+      borderRadius: 20,
+      backgroundColor: colors.accentMuted,
     },
+    exampleChipText: { fontSize: 13, color: colors.accent, fontWeight: '600' },
+    promptField: { marginBottom: 24 },
     sectionLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 },
     optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
     optionChip: {
@@ -214,7 +226,7 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
     },
-    optionChipSelected: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+    optionChipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
     optionChipText: { fontSize: 14, color: colors.textSecondary },
     optionChipTextSelected: { color: colors.background, fontWeight: '600' },
     durationRow: { flexDirection: 'row', gap: 16, justifyContent: 'center' },
@@ -232,13 +244,5 @@ const createStyles = (colors: ThemeColors) =>
     },
     durationUnit: { fontSize: 14, color: colors.textSecondary },
     durationHint: { fontSize: 12, color: colors.textPlaceholder, marginTop: 8, marginBottom: 24 },
-    submitButton: {
-      backgroundColor: colors.textPrimary,
-      borderRadius: 12,
-      paddingVertical: 16,
-      alignItems: 'center',
-      marginTop: 8,
-    },
-    submitButtonDisabled: { opacity: 0.6 },
-    submitButtonText: { color: colors.background, fontSize: 16, fontWeight: '600' },
+    submitButton: { marginTop: 8 },
   });

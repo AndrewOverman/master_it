@@ -21,6 +21,7 @@ import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
+import { Button, EmptyState, Spinner } from '../components/ui';
 
 function getYouTubeVideoId(url: string): string | null {
   const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -129,19 +130,10 @@ export function StepDetailScreen({ route, navigation }: any) {
   if (isLoading || !step) {
     if (!isOnline) {
       return (
-        <View style={styles.centered}>
-          <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
-          <Text style={styles.noResourcesText}>
-            Can't load this step — you're offline and haven't opened it before.
-          </Text>
-        </View>
+        <EmptyState icon="cloud-offline-outline" message="Can't load this step — you're offline and haven't opened it before." />
       );
     }
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      </View>
-    );
+    return <Spinner fullScreen />;
   }
 
   const videoId = step.video_url ? getYouTubeVideoId(step.video_url) : null;
@@ -194,12 +186,11 @@ export function StepDetailScreen({ route, navigation }: any) {
               }}
             />
             {Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={styles.datePickerDoneButton}
+              <Button
+                label="Done"
                 onPress={() => pendingDate && commitDueDate(pendingDate)}
-              >
-                <Text style={styles.datePickerDoneText}>Done</Text>
-              </TouchableOpacity>
+                style={styles.datePickerDoneButton}
+              />
             )}
           </View>
         )}
@@ -273,7 +264,6 @@ export function StepDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: 24, gap: 10 },
     content: { padding: 20, paddingBottom: 40 },
     title: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
     description: { fontSize: 15, color: colors.textSecondary, marginTop: 10, lineHeight: 21 },
@@ -301,9 +291,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 8,
       paddingHorizontal: 20,
       borderRadius: 8,
-      backgroundColor: colors.textPrimary,
     },
-    datePickerDoneText: { color: colors.background, fontSize: 13, fontWeight: '600' },
     videoThumbnail: {
       width: '100%',
       aspectRatio: 16 / 9,

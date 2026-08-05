@@ -8,26 +8,28 @@ export interface ThemeColors {
   textSecondary: string;
   textMuted: string;
   textPlaceholder: string;
-  link: string;
+  accent: string;
+  accentMuted: string;
   destructive: string;
   success: string;
   overlay: string;
 }
 
 export const lightColors: ThemeColors = {
-  background: '#FFFFFF',
+  background: '#FDF8F3',
   surface: '#FFFFFF',
-  surfaceMuted: '#F3F4F6',
-  border: '#E5E7EB',
-  borderMuted: '#F3F4F6',
-  textPrimary: '#111827',
-  textSecondary: '#374151',
-  textMuted: '#6B7280',
-  textPlaceholder: '#9CA3AF',
-  link: '#2563EB',
-  destructive: '#DC2626',
-  success: '#22C55E',
-  overlay: 'rgba(17, 24, 39, 0.4)',
+  surfaceMuted: '#F5EDE4',
+  border: '#E8DDD0',
+  borderMuted: '#F0E6DA',
+  textPrimary: '#2B2420',
+  textSecondary: '#52463C',
+  textMuted: '#7A6B5D',
+  textPlaceholder: '#96806F',
+  accent: '#B84F1E',
+  accentMuted: '#F5DFC9',
+  destructive: '#C4452F',
+  success: '#4A7C59',
+  overlay: 'rgba(43, 36, 32, 0.45)',
 };
 
 export const darkColors: ThemeColors = {
@@ -40,7 +42,8 @@ export const darkColors: ThemeColors = {
   textSecondary: '#D1D5DB',
   textMuted: '#9CA3AF',
   textPlaceholder: '#6B7280',
-  link: '#60A5FA',
+  accent: '#60A5FA',
+  accentMuted: '#1E3A5C',
   destructive: '#F87171',
   success: '#34D399',
   overlay: 'rgba(0, 0, 0, 0.6)',

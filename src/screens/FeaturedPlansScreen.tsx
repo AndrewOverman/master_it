@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { listFeaturedPlans } from '../api/plans';
@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline } from '../lib/offline';
 import { FEATURED_OFFLINE_SAMPLE_KEY } from '../lib/queryPersistence';
+import { EmptyState, Spinner } from '../components/ui';
 
 export function FeaturedPlansScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -69,12 +70,7 @@ export function FeaturedPlansScreen({ navigation }: any) {
           </Text>
         </View>
         {offlineSample.length === 0 ? (
-          <View style={styles.centered}>
-            <Text style={styles.emptyText}>
-              No featured plans saved for offline browsing yet. Open this screen once while
-              online to save some.
-            </Text>
-          </View>
+          <EmptyState message="No featured plans saved for offline browsing yet. Open this screen once while online to save some." />
         ) : (
           <FlatList
             data={offlineSample}
@@ -89,21 +85,13 @@ export function FeaturedPlansScreen({ navigation }: any) {
   }
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      </View>
-    );
+    return <Spinner fullScreen />;
   }
 
   const plans = data?.pages.flatMap((page) => page.data) ?? [];
 
   if (plans.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyText}>No featured plans yet. Check back soon!</Text>
-      </View>
-    );
+    return <EmptyState message="No featured plans yet. Check back soon!" />;
   }
 
   return (
@@ -123,7 +111,9 @@ export function FeaturedPlansScreen({ navigation }: any) {
         }}
         ListFooterComponent={
           isFetchingNextPage ? (
-            <ActivityIndicator size="small" color={colors.textPrimary} style={styles.footerSpinner} />
+            <View style={styles.footerSpinner}>
+              <Spinner size="small" />
+            </View>
           ) : null
         }
       />
@@ -135,8 +125,6 @@ export function FeaturedPlansScreen({ navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background },
-    emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
     list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
     footerSpinner: { marginVertical: 20 },
     offlineBanner: {

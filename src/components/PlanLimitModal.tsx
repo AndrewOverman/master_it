@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { Button } from './ui';
+import { shadows } from '../theme/shadows';
 
 interface PlanLimitModalProps {
   visible: boolean;
@@ -25,9 +27,7 @@ export function PlanLimitModal({ visible, message, onDismiss }: PlanLimitModalPr
           <Ionicons name="lock-closed-outline" size={32} color={colors.textMuted} style={styles.icon} />
           <Text style={styles.title}>Plan limit reached</Text>
           <Text style={styles.message}>{message}</Text>
-          <TouchableOpacity style={styles.button} onPress={onDismiss}>
-            <Text style={styles.buttonText}>Got it</Text>
-          </TouchableOpacity>
+          <Button label="Got it" onPress={onDismiss} style={styles.button} />
         </View>
       </View>
     </Modal>
@@ -51,20 +51,10 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 28,
       paddingHorizontal: 24,
       alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 12,
-      elevation: 8,
+      ...shadows.card,
     },
     icon: { marginBottom: 12 },
     title: { fontSize: 19, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
     message: { fontSize: 14.5, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-    button: {
-      backgroundColor: colors.textPrimary,
-      borderRadius: 12,
-      paddingVertical: 12,
-      paddingHorizontal: 32,
-    },
-    buttonText: { fontSize: 15, fontWeight: '600', color: colors.background },
+    button: { paddingHorizontal: 32, alignSelf: 'stretch' },
   });

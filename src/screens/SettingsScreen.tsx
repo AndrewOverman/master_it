@@ -72,7 +72,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surface,
       gap: 6,
     },
-    themeOptionSelected: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+    themeOptionSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
     themeOptionText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
     themeOptionTextSelected: { color: colors.background },
     row: {

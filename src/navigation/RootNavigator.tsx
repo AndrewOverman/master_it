@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -34,6 +34,7 @@ import { AuthProvider, useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useFeaturedOfflineSampleSync } from '../hooks/useFeaturedOfflineSample';
 import type { ThemeColors } from '../theme/colors';
+import { Spinner } from '../components/ui';
 
 export type AppStackParamList = {
   Featured: undefined;
@@ -148,7 +149,7 @@ function AppHeader({ options }: NativeStackHeaderProps) {
               onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Text style={styles.hamburgerIcon}>☰</Text>
+              <Ionicons name="menu-outline" size={28} color={colors.textPrimary} />
             </TouchableOpacity>
           )}
         </View>
@@ -369,17 +370,13 @@ function RootNavigatorContent() {
         card: colors.surface,
         border: colors.border,
         text: colors.textPrimary,
-        primary: colors.textPrimary,
+        primary: colors.accent,
       },
     };
   }, [colors, colorScheme]);
 
   if (isAuthenticated === null) {
-    return (
-      <View style={styles.bootContainer}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      </View>
-    );
+    return <Spinner fullScreen />;
   }
 
   return (
@@ -405,11 +402,10 @@ export function RootNavigator() {
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    bootContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
     failedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
     failedTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
     failedMessage: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: 20 },
-    retryLink: { fontSize: 15, color: colors.link, fontWeight: '600' },
+    retryLink: { fontSize: 15, color: colors.accent, fontWeight: '600' },
     header: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     headerContent: {
       height: 68,
@@ -419,7 +415,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     headerSlot: { width: 60, alignItems: 'flex-start', justifyContent: 'center' },
     headerRightSlot: { alignItems: 'flex-end' },
-    hamburgerIcon: { fontSize: 30, color: colors.textPrimary },
     headerTitle: { flex: 1, textAlign: 'center', fontSize: 19, fontWeight: '700', color: colors.textPrimary },
     drawer: { width: 280 },
     drawerContainer: { flex: 1, backgroundColor: colors.surface },

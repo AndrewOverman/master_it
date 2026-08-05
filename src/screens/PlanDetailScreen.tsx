@@ -1,16 +1,30 @@
-import React, { useLayoutEffect, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Alert } from 'react-native';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Share,
+  Alert,
+  Animated,
+  Easing,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPlan, setStepComplete, getRelatedPlans, sharePlan } from '../api/plans';
 import { useCopyPlan } from '../hooks/useCopyPlan';
+import { useRefinePlan } from '../hooks/useRefinePlan';
 import { PlanCard } from '../components/PlanCard';
 import { PlanLimitModal } from '../components/PlanLimitModal';
-import type { Plan, PlanStep } from '../types/plan';
+import { RefinePlanModal } from '../components/RefinePlanModal';
+import type { Plan, PlanStep, RefinementTag } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
+import { EmptyState, Spinner } from '../components/ui';
 
 export function PlanDetailScreen({ route, navigation }: any) {
   const { planId } = route.params;
@@ -38,6 +52,35 @@ export function PlanDetailScreen({ route, navigation }: any) {
   const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
     useCopyPlan(navigation);
 
+  const {
+    refineMutation,
+    limitModalVisible: refineLimitModalVisible,
+    limitModalMessage: refineLimitModalMessage,
+    dismissLimitModal: dismissRefineLimitModal,
+  } = useRefinePlan(navigation, planId);
+  const [refineModalVisible, setRefineModalVisible] = useState(false);
+  // Tracks which refinement id we've already alerted on, so a failed
+  // attempt surfaces its "didn't take" alert once per attempt rather than
+  // re-firing every time this query refetches.
+  const alertedRefinementIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const latest = plan?.latest_refinement;
+    if (latest?.status === 'failed' && alertedRefinementIdRef.current !== latest.id) {
+      alertedRefinementIdRef.current = latest.id;
+      Alert.alert('Refinement failed', "We couldn't apply your changes — your plan wasn't affected. Please try again.");
+    }
+  }, [plan?.latest_refinement]);
+
+  const handleRefineSubmit = ({ tags, notes }: { tags: RefinementTag[]; notes: string }) => {
+    if (!requireOnline('refine this plan')) return;
+    setRefineModalVisible(false);
+    refineMutation.mutate({
+      ...(tags.length > 0 ? { tags } : {}),
+      ...(notes.length > 0 ? { notes } : {}),
+    });
+  };
+
   const shareMutation = useMutation({
     mutationFn: () => sharePlan(planId),
     onSuccess: (token) => {
@@ -63,21 +106,30 @@ export function PlanDetailScreen({ route, navigation }: any) {
     }
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          onPress={handleSharePress}
-          disabled={shareMutation.isPending}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          {shareMutation.isPending ? (
-            <ActivityIndicator size="small" color={colors.textPrimary} />
-          ) : (
-            <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => setRefineModalVisible(true)}
+            disabled={refineMutation.isPending}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="sparkles-outline" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleSharePress}
+            disabled={shareMutation.isPending}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            {shareMutation.isPending ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} />
+            ) : (
+              <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
+            )}
+          </TouchableOpacity>
+        </View>
       ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation, plan?.status, shareMutation.isPending, colors]);
+  }, [navigation, plan?.status, shareMutation.isPending, refineMutation.isPending, colors]);
 
   const applyStepCompletion = (plan: Plan, stepId: number, completed: boolean): Plan => ({
     ...plan,
@@ -137,25 +189,32 @@ export function PlanDetailScreen({ route, navigation }: any) {
     },
   });
 
+  const completedCount = plan?.steps.filter((step) => step.completed_at).length ?? 0;
+  const totalSteps = plan?.steps.length ?? 0;
+  const progressRatio = totalSteps > 0 ? completedCount / totalSteps : 0;
+
+  // Animates toward the new ratio (rather than jumping) both on first
+  // paint and on every check/uncheck, so progress always reads as a
+  // continuous fill instead of a layout snap.
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progressRatio,
+      duration: 450,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progressAnim, progressRatio]);
+
   if (isLoading || !plan) {
     if (!isOnline) {
       return (
-        <View style={styles.centered}>
-          <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
-          <Text style={styles.emptyText}>
-            Can't load this plan — you're offline and haven't opened it before.
-          </Text>
-        </View>
+        <EmptyState icon="cloud-offline-outline" message="Can't load this plan — you're offline and haven't opened it before." />
       );
     }
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      </View>
-    );
+    return <Spinner fullScreen />;
   }
 
-  const completedCount = plan.steps.filter((step) => step.completed_at).length;
   const syncedLabel = formatRelativeTime(dataUpdatedAt);
 
   const renderStep = ({ item }: { item: PlanStep }) => {
@@ -171,7 +230,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
           }}
         >
           <View style={[styles.checkbox, completed && styles.checkboxChecked]}>
-            {completed && <Text style={styles.checkmark}>✓</Text>}
+            {completed && <Ionicons name="checkmark" size={14} color={colors.background} />}
           </View>
         </TouchableOpacity>
 
@@ -195,11 +254,35 @@ export function PlanDetailScreen({ route, navigation }: any) {
   return (
     <View style={styles.container}>
       <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
+      <PlanLimitModal
+        visible={refineLimitModalVisible}
+        message={refineLimitModalMessage}
+        onDismiss={dismissRefineLimitModal}
+      />
+      <RefinePlanModal
+        visible={refineModalVisible}
+        isSubmitting={refineMutation.isPending}
+        onSubmit={handleRefineSubmit}
+        onDismiss={() => setRefineModalVisible(false)}
+      />
       <View style={styles.header}>
         <Text style={styles.planTitle}>{plan.title}</Text>
         <Text style={styles.progress}>
           {completedCount} of {plan.steps.length} steps complete
         </Text>
+        <View style={styles.progressTrack} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}>
+          <Animated.View
+            style={[
+              styles.progressFill,
+              {
+                width: progressAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0%', '100%'],
+                }),
+              },
+            ]}
+          />
+        </View>
         {!isOnline && (
           <View style={styles.offlineRow}>
             <Ionicons name="cloud-offline-outline" size={13} color={colors.textPlaceholder} />
@@ -237,11 +320,18 @@ export function PlanDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: 24, gap: 10 },
-    emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
     header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
     progress: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+    progressTrack: {
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.surfaceMuted,
+      marginTop: 10,
+      overflow: 'hidden',
+    },
+    progressFill: { height: '100%', borderRadius: 3, backgroundColor: colors.accent },
     offlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
     offlineText: { flex: 1, fontSize: 12, color: colors.textPlaceholder },
     list: { padding: 20 },
@@ -259,8 +349,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       marginRight: 14,
     },
-    checkboxChecked: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
-    checkmark: { color: colors.background, fontSize: 13, fontWeight: '700' },
+    checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
     stepContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
     stepText: { flex: 1 },
     stepTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },

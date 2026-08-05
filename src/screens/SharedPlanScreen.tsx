@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSharedPlan, copySharedPlan } from '../api/plans';
 import { PlanLimitModal } from '../components/PlanLimitModal';
@@ -8,6 +7,7 @@ import type { PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useRequireOnline } from '../lib/offline';
+import { Button, EmptyState, Spinner } from '../components/ui';
 
 // Read-only preview of a plan someone else shared a link to — reachable
 // only via a masterit://plans/shared/{token} deep link, never from normal
@@ -50,22 +50,16 @@ export function SharedPlanScreen({ route, navigation }: any) {
   };
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.textPrimary} />
-      </View>
-    );
+    return <Spinner fullScreen />;
   }
 
   if (isError || !plan) {
     return (
-      <View style={styles.centered}>
-        <Ionicons name="link-outline" size={28} color={colors.textPlaceholder} />
-        <Text style={styles.emptyTitle}>This link isn't available</Text>
-        <Text style={styles.emptyText}>
-          The plan may have been unshared, or the link is no longer valid.
-        </Text>
-      </View>
+      <EmptyState
+        icon="link-outline"
+        title="This link isn't available"
+        message="The plan may have been unshared, or the link is no longer valid."
+      />
     );
   }
 
@@ -102,17 +96,7 @@ export function SharedPlanScreen({ route, navigation }: any) {
         contentContainerStyle={styles.list}
       />
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.addButton, copyMutation.isPending && styles.addButtonDisabled]}
-          onPress={handleAddPress}
-          disabled={copyMutation.isPending}
-        >
-          {copyMutation.isPending ? (
-            <ActivityIndicator size="small" color={colors.background} />
-          ) : (
-            <Text style={styles.addButtonText}>Add to My Plans</Text>
-          )}
-        </TouchableOpacity>
+        <Button label="Add to My Plans" onPress={handleAddPress} loading={copyMutation.isPending} />
       </View>
     </View>
   );
@@ -121,16 +105,6 @@ export function SharedPlanScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.background,
-      padding: 24,
-      gap: 10,
-    },
-    emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
-    emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center' },
     header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     emoji: { fontSize: 32, marginBottom: 4 },
     planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
@@ -154,12 +128,4 @@ const createStyles = (colors: ThemeColors) =>
       borderTopColor: colors.borderMuted,
       backgroundColor: colors.background,
     },
-    addButton: {
-      backgroundColor: colors.textPrimary,
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: 'center',
-    },
-    addButtonDisabled: { opacity: 0.6 },
-    addButtonText: { fontSize: 16, fontWeight: '700', color: colors.background },
   });

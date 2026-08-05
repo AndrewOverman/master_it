@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,8 @@ import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
 import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
+import { EmptyState, Spinner } from '../components/ui';
+import { shadows } from '../theme/shadows';
 
 export function PlansListScreen({ navigation, route }: any) {
   const queryClient = useQueryClient();
@@ -102,21 +104,17 @@ export function PlansListScreen({ navigation, route }: any) {
     if (!isOnline) {
       return (
         <View style={styles.container}>
-          <View style={styles.centered}>
-            <Ionicons name="cloud-offline-outline" size={28} color={colors.textPlaceholder} />
-            <Text style={styles.emptyText}>
-              You're offline. Plans you've opened before will show up here once they're cached.
-            </Text>
-          </View>
+          <EmptyState
+            icon="cloud-offline-outline"
+            message="You're offline. Plans you've opened before will show up here once they're cached."
+          />
           {newPlanFab}
         </View>
       );
     }
     return (
       <View style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.textPrimary} />
-        </View>
+        <Spinner fullScreen />
         {newPlanFab}
       </View>
     );
@@ -125,9 +123,7 @@ export function PlansListScreen({ navigation, route }: any) {
   if (!plans || plans.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={styles.centered}>
-          <Text style={styles.emptyText}>You haven't created any plans yet.</Text>
-        </View>
+        <EmptyState message="You haven't created any plans yet." />
         {newPlanFab}
       </View>
     );
@@ -245,7 +241,6 @@ export function PlansListScreen({ navigation, route }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background, gap: 10 },
     fab: {
       position: 'absolute',
       alignSelf: 'center',
@@ -256,15 +251,10 @@ const createStyles = (colors: ThemeColors) =>
       height: 52,
       paddingHorizontal: 22,
       borderRadius: 26,
-      backgroundColor: colors.textPrimary,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 6,
-      elevation: 6,
+      backgroundColor: colors.accent,
+      ...shadows.fab,
     },
     fabLabel: { color: colors.background, fontSize: 15, fontWeight: '600' },
-    emptyText: { fontSize: 15, color: colors.textMuted, textAlign: 'center' },
     list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
     offlineBanner: {
       flexDirection: 'row',
