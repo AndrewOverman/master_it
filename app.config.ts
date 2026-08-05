@@ -1,4 +1,5 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import { lightColors } from './src/theme/colors';
 
 type Variant = 'development' | 'staging' | 'production';
 
@@ -39,6 +40,10 @@ export default (_context: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: bundleId,
+    adaptiveIcon: {
+      foregroundImage: './assets/adaptive-icon.png',
+      backgroundColor: lightColors.accent,
+    },
   },
   extra: {
     eas: {
@@ -54,7 +59,7 @@ export default (_context: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#ffffff',
+        backgroundColor: lightColors.background,
       },
     ],
   ],

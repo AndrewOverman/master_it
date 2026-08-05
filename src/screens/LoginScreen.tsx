@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
 import { login, register } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
-import { Button, TextField } from '../components/ui';
+import { Button, TextField, Logo } from '../components/ui';
 import { getApiErrorMessage } from '../utils/apiError';
 import { radius } from '../theme/radius';
 import { spacing } from '../theme/spacing';
@@ -51,81 +52,89 @@ export function LoginScreen({ navigation }: any) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.content}>
-        <Text style={styles.heading}>{mode === 'login' ? 'Welcome back' : 'Create an account'}</Text>
-        <Text style={styles.subheading}>
-          {mode === 'login' ? 'Log in to build and track your plans.' : 'Sign up to get started.'}
-        </Text>
-
-        {sessionExpired && (
-          <View style={styles.sessionBanner}>
-            <Text style={styles.sessionBannerText}>Your session expired — log back in</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.avoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.content}>
+          <View style={styles.brandHeader}>
+            <Logo />
           </View>
-        )}
 
-        {mode === 'register' && (
+          <Text style={styles.heading}>{mode === 'login' ? 'Welcome back' : 'Create an account'}</Text>
+          <Text style={styles.subheading}>
+            {mode === 'login' ? 'Log in to build and track your plans.' : 'Sign up to get started.'}
+          </Text>
+
+          {sessionExpired && (
+            <View style={styles.sessionBanner}>
+              <Text style={styles.sessionBannerText}>Your session expired — log back in</Text>
+            </View>
+          )}
+
+          {mode === 'register' && (
+            <TextField
+              placeholder="Name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              editable={!mutation.isPending}
+            />
+          )}
           <TextField
-            placeholder="Name"
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
             editable={!mutation.isPending}
           />
-        )}
-        <TextField
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          editable={!mutation.isPending}
-        />
-        <TextField
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!mutation.isPending}
-        />
+          <TextField
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            editable={!mutation.isPending}
+          />
 
-        {mode === 'login' && (
+          {mode === 'login' && (
+            <TouchableOpacity
+              style={styles.forgotPasswordLink}
+              onPress={() => navigation.navigate('ForgotPassword')}
+              disabled={mutation.isPending}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
+
+          <Button
+            label={mode === 'login' ? 'Log In' : 'Sign Up'}
+            onPress={handleSubmit}
+            loading={mutation.isPending}
+          />
+
           <TouchableOpacity
-            style={styles.forgotPasswordLink}
-            onPress={() => navigation.navigate('ForgotPassword')}
+            style={styles.toggleButton}
+            onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
             disabled={mutation.isPending}
           >
-            <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            <Text style={styles.toggleText}>
+              {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
+            </Text>
           </TouchableOpacity>
-        )}
-
-        <Button
-          label={mode === 'login' ? 'Log In' : 'Sign Up'}
-          onPress={handleSubmit}
-          loading={mutation.isPending}
-        />
-
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
-          disabled={mutation.isPending}
-        >
-          <Text style={styles.toggleText}>
-            {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    avoider: { flex: 1 },
+    brandHeader: { alignItems: 'center', marginBottom: spacing.xxl },
     content: { flex: 1, justifyContent: 'center', padding: 24 },
     heading: { fontSize: 26, fontWeight: '700', color: colors.textPrimary },
     subheading: { fontSize: 15, color: colors.textMuted, marginTop: 6, marginBottom: 28 },
