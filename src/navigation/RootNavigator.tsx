@@ -145,6 +145,23 @@ function BackButton() {
   );
 }
 
+// Featured is the landing screen and the app's core action ("describe a
+// goal, get a plan") deserves a presence there, not just a two-tap detour
+// through the drawer to My Plans' FAB.
+function NewPlanHeaderButton() {
+  const navigation = useNavigation();
+  const { colors } = useTheme();
+  return (
+    <TouchableOpacity
+      onPress={() => (navigation.navigate as any)('NewPlan')}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      accessibilityLabel="New plan"
+    >
+      <Ionicons name="add-circle-outline" size={28} color={colors.accent} />
+    </TouchableOpacity>
+  );
+}
+
 // Native headers on iOS can't be resized via style props (they're a real
 // UINavigationBar), so this replaces the header entirely to get a taller
 // bar and a bigger hamburger icon. Screens can still override the left
@@ -193,7 +210,11 @@ function AppStackNavigator() {
       initialRouteName="Featured"
       screenOptions={{ headerShown: true, header: (props) => <AppHeader {...props} /> }}
     >
-      <AppStack.Screen name="Featured" component={FeaturedPlansScreen} options={{ title: 'Featured Plans' }} />
+      <AppStack.Screen
+        name="Featured"
+        component={FeaturedPlansScreen}
+        options={{ title: 'Featured Plans', headerRight: () => <NewPlanHeaderButton /> }}
+      />
       <AppStack.Screen name="NewPlan" component={NewPlanScreen} options={{ title: 'New Plan' }} />
       <AppStack.Screen
         name="Generating"

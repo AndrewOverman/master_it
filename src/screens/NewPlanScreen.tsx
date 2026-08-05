@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPlan } from '../api/plans';
 import type { CreatePlanRequest } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
@@ -44,6 +44,7 @@ export function NewPlanScreen({ navigation }: any) {
   const [days, setDays] = useState('');
   const requireOnline = useRequireOnline();
   const promptInputRef = useRef<TextInput>(null);
+  const queryClient = useQueryClient();
 
   const handleExamplePress = (example: string) => {
     setPrompt(example);
@@ -53,6 +54,9 @@ export function NewPlanScreen({ navigation }: any) {
   const mutation = useMutation({
     mutationFn: createPlan,
     onSuccess: (data) => {
+      // Refreshes the shared ['plans'] cache so Featured's first-time hero
+      // clears immediately rather than on next pull-to-refresh.
+      queryClient.invalidateQueries({ queryKey: ['plans'] });
       // Navigate to the generating screen with the new plan's id
       navigation.navigate('Generating', { planId: data.id });
     },
