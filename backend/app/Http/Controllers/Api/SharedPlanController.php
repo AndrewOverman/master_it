@@ -20,15 +20,9 @@ class SharedPlanController extends Controller
     {
         $plan = $this->findSharedPlan($token);
 
-        $user = $request->user();
-
-        if ($user->plans()->count() >= $user->max_plans) {
-            return response()->json([
-                'message' => 'You\'ve reached the limit of '.$user->max_plans.' plans for this account.',
-            ], 429);
-        }
-
-        $copy = $plan->cloneForUser($user);
+        // Copying is unlimited on every tier, including free — it doesn't
+        // touch the LLM, so there's no cost to gate against.
+        $copy = $plan->cloneForUser($request->user());
 
         return new PlanResource($copy->load('steps'));
     }

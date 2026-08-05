@@ -173,7 +173,7 @@ class PlanSharingTest extends TestCase
     public function test_expired_share_token_cannot_be_copied(): void
     {
         $owner = User::factory()->create();
-        $viewer = User::factory()->create(['max_plans' => 3]);
+        $viewer = User::factory()->create();
         $plan = $this->makePlan($owner, [
             'share_token' => 'expired-token',
             'share_token_expires_at' => now()->subMinute(),
@@ -210,12 +210,7 @@ class PlanSharingTest extends TestCase
     public function test_copying_a_shared_plan_clones_it_into_the_viewers_account(): void
     {
         $owner = User::factory()->create();
-        // max_plans is set explicitly here: it defaults to 3 at the DB
-        // level, but a factory-created model in memory never re-fetches
-        // that default, so it'd otherwise read as null and trip the
-        // >= comparison in SharedPlanController::copy via PHP's loose
-        // null-as-0 comparison.
-        $viewer = User::factory()->create(['max_plans' => 3]);
+        $viewer = User::factory()->create();
         $plan = $this->makePlan($owner, ['share_token' => 'abc123', 'emoji' => '🎯']);
         $plan->steps()->create([
             'order' => 1,
@@ -242,21 +237,19 @@ class PlanSharingTest extends TestCase
         $this->assertNull($copy->share_token);
     }
 
-    public function test_copying_a_shared_plan_respects_the_viewers_max_plans_limit(): void
+    public function test_copying_a_shared_plan_has_no_limit(): void
     {
-        $owner = User::factory()->create();
-        $viewer = User::factory()->create(['max_plans' => 1]);
-        $viewer->plans()->create([
-            'title' => 'Existing Plan',
-            'original_prompt' => 'Existing',
-            'status' => 'ready',
-        ]);
+        // Copying never calls the LLM, so unlike generation it isn't gated
+        // by subscription tier or the free-generation allowance.
+        $owner = User::factory()->create(['subscription_tier' => 'free']);
+        $viewer = User::factory()->create(['subscription_tier' => 'free']);
         $plan = $this->makePlan($owner, ['share_token' => 'abc123']);
 
-        $response = $this->actingAs($viewer)->postJson('/api/v1/plans/shared/abc123/copy');
+        for ($i = 0; $i < 5; $i++) {
+            $this->actingAs($viewer)->postJson('/api/v1/plans/shared/abc123/copy')->assertCreated();
+        }
 
-        $response->assertStatus(429);
-        $this->assertSame(1, $viewer->plans()->count());
+        $this->assertSame(5, $viewer->plans()->count());
     }
 
     public function test_cannot_copy_via_a_revoked_or_unknown_share_token(): void

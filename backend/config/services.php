@@ -48,4 +48,10 @@ return [
         'max_per_step' => (int) env('MAX_RESOURCES_PER_STEP', 1),
     ],
 
+    'revenuecat' => [
+        // Set the same value in the RevenueCat dashboard under
+        // Project settings > Integrations > Webhooks > Authorization header.
+        'webhook_secret' => env('REVENUECAT_WEBHOOK_SECRET'),
+    ],
+
 ];
