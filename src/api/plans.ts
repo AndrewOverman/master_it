@@ -4,6 +4,8 @@ import type {
   PlanStep,
   CreatePlanRequest,
   CreatePlanResponse,
+  RefinePlanRequest,
+  RefinePlanResponse,
   PaginatedResponse,
 } from '../types/plan';
 
@@ -71,6 +73,14 @@ export async function setPlanComplete(planId: number, completed: boolean): Promi
 // Clears the plan's and all its steps' completed_at, so progress starts over.
 export async function resetPlanProgress(planId: number): Promise<Plan> {
   const { data } = await apiClient.post<Plan>(`/api/v1/plans/${planId}/reset`);
+  return data;
+}
+
+// POST /api/v1/plans/{planId}/refine
+// Re-queues generation using the existing steps as a baseline plus the
+// requested changes. Same 202 + poll-via-Generating pattern as createPlan.
+export async function refinePlan(planId: number, payload: RefinePlanRequest): Promise<RefinePlanResponse> {
+  const { data } = await apiClient.post<RefinePlanResponse>(`/api/v1/plans/${planId}/refine`, payload);
   return data;
 }
 

@@ -3,6 +3,34 @@
 
 export type PlanStatus = 'generating' | 'ready' | 'failed' | 'rejected';
 
+// Must stay hand-synced with GeneratePlanSteps::TAG_INSTRUCTIONS on the
+// backend (backend/app/Jobs/GeneratePlanSteps.php) — that's the single
+// source of truth for which tags exist and what they mean to the LLM.
+export type RefinementTag =
+  | 'less_intense'
+  | 'more_beginner_friendly'
+  | 'no_equipment'
+  | 'shorter_timeline'
+  | 'more_detail'
+  | 'more_variety';
+
+export const REFINEMENT_TAG_LABELS: Record<RefinementTag, string> = {
+  less_intense: 'Less intense',
+  more_beginner_friendly: 'More beginner-friendly',
+  no_equipment: 'No equipment needed',
+  shorter_timeline: 'Shorter timeline',
+  more_detail: 'More detail',
+  more_variety: 'More variety',
+};
+
+export interface PlanRefinement {
+  id: number;
+  tags: RefinementTag[];
+  notes: string | null;
+  status: 'pending' | 'applied' | 'failed';
+  created_at: string;
+}
+
 export interface StepResource {
   id: number;
   url: string;
@@ -44,6 +72,10 @@ export interface Plan {
   // shared/featured views of someone else's plan.
   share_token?: string | null;
   share_token_expires_at?: string | null; // ISO datetime string, set 30 days out when share_token is minted
+  // Owner-only, like share_token above. Null if the plan has never been
+  // refined; check .status === 'failed' to detect a refine attempt that
+  // didn't take (the plan itself stays 'ready' either way).
+  latest_refinement?: PlanRefinement | null;
   steps: PlanStep[];
 }
 
@@ -67,6 +99,20 @@ export interface CreatePlanRequest {
 // Response from POST /api/v1/plans — plan is created but generation
 // happens in a queued job, so steps will be empty and status "generating"
 export interface CreatePlanResponse {
+  id: number;
+  status: PlanStatus;
+}
+
+// Request body for POST /api/v1/plans/{planId}/refine. At least one of
+// tags/notes must be present — the backend 422s if both are empty.
+export interface RefinePlanRequest {
+  tags?: RefinementTag[];
+  notes?: string;
+}
+
+// Response from POST /api/v1/plans/{planId}/refine — same shape as
+// CreatePlanResponse, since refining re-queues generation the same way.
+export interface RefinePlanResponse {
   id: number;
   status: PlanStatus;
 }

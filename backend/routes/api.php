@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PlanController;
 use App\Http\Controllers\Api\PlanStepController;
+use App\Http\Controllers\Api\RevenueCatWebhookController;
 use App\Http\Controllers\Api\SharedPlanController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
@@ -10,6 +11,10 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
     Route::post('register', [AuthController::class, 'register'])->middleware('throttle:register');
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login');
+
+    // Authenticated via the Authorization-header shared secret configured
+    // in the RevenueCat dashboard, not Sanctum — RevenueCat is the caller.
+    Route::post('webhooks/revenuecat', [RevenueCatWebhookController::class, 'handle']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
@@ -29,6 +34,7 @@ Route::prefix('v1')->group(function () {
         Route::get('plans/{plan}', [PlanController::class, 'show']);
         Route::patch('plans/{plan}', [PlanController::class, 'update']);
         Route::post('plans/{plan}/reset', [PlanController::class, 'reset']);
+        Route::post('plans/{plan}/refine', [PlanController::class, 'refine']);
         Route::post('plans/{plan}/share', [PlanController::class, 'share']);
         Route::delete('plans/{plan}/share', [PlanController::class, 'unshare']);
         Route::get('plans/{plan}/steps/{step}', [PlanStepController::class, 'show']);

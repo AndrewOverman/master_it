@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PlanResource;
 use App\Jobs\GeneratePlanSteps;
 use App\Models\Plan;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class PlanController extends Controller
 {
     public function index(Request $request)
     {
-        $plans = $request->user()->plans()->with('steps')->latest()->get();
+        $plans = $request->user()->plans()->with(['steps', 'latestRefinement'])->latest()->get();
 
         return PlanResource::collection($plans);
     }
@@ -21,13 +22,11 @@ class PlanController extends Controller
     {
         $user = $request->user();
 
-        // Plan generation calls a paid LLM API, so cap how many plans a user
-        // can burn credits creating. Per-user so limits can be raised
-        // individually (e.g. for internal testing) without a code change.
-        if ($user->plans()->count() >= $user->max_plans) {
-            return response()->json([
-                'message' => 'You\'ve reached the limit of '.$user->max_plans.' plans for this account.',
-            ], 429);
+        // Plan generation calls a paid LLM API, so it's gated by the user's
+        // subscription tier (plus a one-time free generation) rather than
+        // the flat per-account cap copying uses. See User::canGenerate().
+        if (! $user->canGenerate()) {
+            return response()->json(['message' => $this->generationLimitMessage($user)], 429);
         }
 
         $validated = $request->validate([
@@ -45,6 +44,11 @@ class PlanController extends Controller
             'time_commitment' => $validated['time_commitment'] ?? null,
             'target_days' => $validated['target_days'] ?? null,
         ]);
+
+        // Charged on dispatch, not on successful completion — a plan that
+        // later fails to generate still consumes the allowance. Revisit if
+        // that turns out to be worth refunding on failure.
+        $user->recordGeneration();
 
         GeneratePlanSteps::dispatch($plan);
 
@@ -86,6 +90,50 @@ class PlanController extends Controller
         return new PlanResource($plan->load('steps'));
     }
 
+    public function refine(Request $request, Plan $plan)
+    {
+        abort_unless($plan->user_id === $request->user()->id, 404);
+
+        $user = $request->user();
+
+        if (! $user->canGenerate()) {
+            return response()->json(['message' => $this->generationLimitMessage($user)], 429);
+        }
+
+        $validated = $request->validate([
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'in:'.implode(',', GeneratePlanSteps::availableTags())],
+            'notes' => ['nullable', 'string', 'max:280'],
+        ]);
+
+        if (empty($validated['tags']) && empty($validated['notes'])) {
+            return response()->json([
+                'message' => 'Add at least one tag or a note describing what to change.',
+            ], 422);
+        }
+
+        // Atomically claims the plan: enforces "must be ready" and closes a
+        // double-tap race in one shot. Two near-simultaneous requests can't
+        // both succeed here, so only one ever reaches the charge/dispatch
+        // below — without this, both could create a PlanRefinement, both
+        // call recordGeneration() for what's really one logical action, and
+        // both dispatch a job racing to replace the same plan's steps.
+        $flipped = Plan::whereKey($plan->id)->where('status', 'ready')->update(['status' => 'generating']);
+        abort_unless($flipped === 1, 422);
+
+        $plan->refinements()->create([
+            'tags' => $validated['tags'] ?? [],
+            'notes' => $validated['notes'] ?? null,
+            'status' => 'pending',
+        ]);
+
+        $user->recordGeneration();
+
+        GeneratePlanSteps::dispatch($plan, isRefinement: true);
+
+        return response()->json(['id' => $plan->id, 'status' => 'generating'], 202);
+    }
+
     public function featured(Request $request)
     {
         $plans = Plan::with('steps')
@@ -124,15 +172,9 @@ class PlanController extends Controller
         // featured and finished generating, not by who owns it.
         abort_unless($plan->is_featured && $plan->status === 'ready', 404);
 
-        $user = $request->user();
-
-        if ($user->plans()->count() >= $user->max_plans) {
-            return response()->json([
-                'message' => 'You\'ve reached the limit of '.$user->max_plans.' plans for this account.',
-            ], 429);
-        }
-
-        $copy = $plan->cloneForUser($user);
+        // Copying is unlimited on every tier, including free — it doesn't
+        // touch the LLM, so there's no cost to gate against.
+        $copy = $plan->cloneForUser($request->user());
 
         return new PlanResource($copy->load('steps'));
     }
@@ -152,5 +194,12 @@ class PlanController extends Controller
         $plan->revokeShareToken();
 
         return response()->noContent();
+    }
+
+    private function generationLimitMessage(User $user): string
+    {
+        return $user->hasActiveSubscription()
+            ? "You've reached your monthly limit of {$user->monthlyGenerationLimit()} generated plans."
+            : 'You\'ve used your free plan generation. Subscribe to generate more.';
     }
 }

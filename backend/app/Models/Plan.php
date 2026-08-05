@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class Plan extends Model
@@ -50,6 +51,16 @@ class Plan extends Model
     public function sourcePlan(): BelongsTo
     {
         return $this->belongsTo(Plan::class, 'source_plan_id');
+    }
+
+    public function refinements(): HasMany
+    {
+        return $this->hasMany(PlanRefinement::class);
+    }
+
+    public function latestRefinement(): HasOne
+    {
+        return $this->hasOne(PlanRefinement::class)->latestOfMany();
     }
 
     /**

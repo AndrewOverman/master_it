@@ -7,6 +7,7 @@ use App\Services\YouTubeVideoSearchService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -30,6 +31,18 @@ class GeneratePlanSteps implements ShouldQueue
     // videos are a supplement for steps that genuinely benefit from a visual
     // demonstration, not a default for every step.
     private const MAX_VIDEOS_PER_PLAN = 2;
+
+    // Maps a refinement tag to the instruction sentence sent to Claude.
+    // PlanController validates incoming tags against availableTags() below,
+    // so this is the one place the set of valid tags is defined.
+    private const TAG_INSTRUCTIONS = [
+        'less_intense' => 'Reduce intensity/difficulty relative to the current steps.',
+        'more_beginner_friendly' => 'Simplify steps and assume less prior knowledge than before.',
+        'no_equipment' => 'Avoid steps that require special equipment, tools, or a gym/facility.',
+        'shorter_timeline' => 'Compress the plan into a shorter total timeframe.',
+        'more_detail' => 'Add more specific, concrete detail to each step\'s description.',
+        'more_variety' => 'Introduce more varied activities rather than repeating similar steps.',
+    ];
 
     private const SYSTEM_PROMPT = <<<'PROMPT'
         You are an expert curriculum and project planner. Your job is to take
@@ -112,6 +125,27 @@ class GeneratePlanSteps implements ShouldQueue
            to hosting, then verify links, forms, and layout in at least two
            different browsers.
 
+        ## Refining an existing plan
+
+        Sometimes the user message below will include a "Current plan steps"
+        list and a "Requested changes" list instead of just a bare goal. When
+        that happens, you're revising an existing plan, not starting from a
+        blank page:
+
+        - Keep steps that still serve the goal and aren't touched by the
+          requested changes — don't rewrite a step that isn't broken just to
+          sound different.
+        - Apply every requested change concretely. If a change conflicts with
+          an existing step, change or replace that step; don't just append a
+          caveat to it.
+        - The revised plan should still be 4-7 sequential steps following all
+          the same guidance above (specific, actionable, sequential, scoped,
+          realistic, named for the activity).
+        - The same content policy below still applies — call
+          flag_unsupported_goal instead if the requested changes themselves
+          push the goal into an unsupported category, exactly as you would
+          for an original goal.
+
         ## Output format
 
         Call the create_plan_steps tool with:
@@ -164,7 +198,16 @@ class GeneratePlanSteps implements ShouldQueue
 
     public function __construct(
         public Plan $plan,
+        public bool $isRefinement = false,
     ) {}
+
+    /**
+     * @return list<string>
+     */
+    public static function availableTags(): array
+    {
+        return array_keys(self::TAG_INSTRUCTIONS);
+    }
 
     public function handle(): void
     {
@@ -177,6 +220,17 @@ class GeneratePlanSteps implements ShouldQueue
                 'reason' => $result['reason'],
             ]);
 
+            // A refinement's requested changes can themselves get flagged,
+            // but that must never take down an already-working plan — leave
+            // it ready with its existing steps untouched and only mark the
+            // refinement attempt itself as failed.
+            if ($this->isRefinement) {
+                $this->plan->update(['status' => 'ready']);
+                $this->plan->latestRefinement?->update(['status' => 'failed']);
+
+                return;
+            }
+
             $this->plan->update([
                 'status' => 'rejected',
                 'rejection_category' => $result['category'],
@@ -188,7 +242,6 @@ class GeneratePlanSteps implements ShouldQueue
         ['emoji' => $emoji, 'steps' => $steps] = $result;
 
         $videoService = app(YouTubeVideoSearchService::class);
-        $videosRemaining = self::MAX_VIDEOS_PER_PLAN;
 
         if (! $videoService->isConfigured()) {
             Log::info('GeneratePlanSteps: YOUTUBE_API_KEY not configured, skipping video attachment', [
@@ -196,36 +249,58 @@ class GeneratePlanSteps implements ShouldQueue
             ]);
         }
 
-        $cumulativeDays = 0;
+        // A refinement re-anchors due dates on now() rather than the plan's
+        // original created_at, mirroring Plan::cloneForUser() — otherwise a
+        // plan refined weeks after creation could get due dates in the past.
+        $dueDateAnchor = $this->isRefinement ? now() : $this->plan->created_at;
 
-        foreach ($steps as $index => $step) {
-            $cumulativeDays += $step['estimated_days'];
-
-            $video = null;
-
-            if ($videosRemaining > 0 && ($step['needs_video'] ?? false)) {
-                $video = $this->findVideoForStep($videoService, $step);
-
-                if ($video) {
-                    $videosRemaining--;
-                }
+        // Wrapped in a transaction so a mid-loop failure (e.g. a transient DB
+        // error on one step) rolls back to the pre-refinement steps intact
+        // rather than leaving the plan "ready" with a truncated step list.
+        DB::transaction(function () use ($steps, $emoji, $videoService, $dueDateAnchor) {
+            if ($this->isRefinement) {
+                // Cascade-deletes each step's resources (step_resources.plan_step_id
+                // is cascadeOnDelete()) — safe to replace wholesale rather
+                // than diff against the new set.
+                $this->plan->steps()->delete();
             }
 
-            $this->plan->steps()->create([
-                'order' => $index + 1,
-                'title' => $step['title'],
-                'description' => $step['description'],
-                'estimated_days' => $step['estimated_days'],
-                'due_date' => $this->plan->created_at->copy()->addDays($cumulativeDays),
-                'video_url' => $video['url'] ?? null,
-                'video_title' => $video['title'] ?? null,
-                'video_channel' => $video['channel'] ?? null,
-                'video_view_count' => $video['view_count'] ?? null,
-                'video_published_at' => $video['published_at'] ?? null,
-            ]);
-        }
+            $videosRemaining = self::MAX_VIDEOS_PER_PLAN;
+            $cumulativeDays = 0;
 
-        $this->plan->update(['status' => 'ready', 'emoji' => $emoji]);
+            foreach ($steps as $index => $step) {
+                $cumulativeDays += $step['estimated_days'];
+
+                $video = null;
+
+                if ($videosRemaining > 0 && ($step['needs_video'] ?? false)) {
+                    $video = $this->findVideoForStep($videoService, $step);
+
+                    if ($video) {
+                        $videosRemaining--;
+                    }
+                }
+
+                $this->plan->steps()->create([
+                    'order' => $index + 1,
+                    'title' => $step['title'],
+                    'description' => $step['description'],
+                    'estimated_days' => $step['estimated_days'],
+                    'due_date' => $dueDateAnchor->copy()->addDays($cumulativeDays),
+                    'video_url' => $video['url'] ?? null,
+                    'video_title' => $video['title'] ?? null,
+                    'video_channel' => $video['channel'] ?? null,
+                    'video_view_count' => $video['view_count'] ?? null,
+                    'video_published_at' => $video['published_at'] ?? null,
+                ]);
+            }
+
+            $this->plan->update(['status' => 'ready', 'emoji' => $emoji]);
+
+            if ($this->isRefinement) {
+                $this->plan->latestRefinement?->update(['status' => 'applied']);
+            }
+        });
     }
 
     /**
@@ -390,16 +465,63 @@ class GeneratePlanSteps implements ShouldQueue
         $skillLevel = $this->plan->skill_level ?? 'unspecified';
         $timeCommitment = $this->plan->time_commitment ?? 'unspecified';
 
-        return <<<PROMPT
+        $prompt = <<<PROMPT
             Goal: "{$this->plan->original_prompt}"
             Skill level: {$skillLevel}
             Time commitment: {$timeCommitment}
             Target plan length: approximately {$totalDays} days total
             PROMPT;
+
+        if (! $this->isRefinement) {
+            return $prompt;
+        }
+
+        return $prompt."\n\n".$this->buildRefinementSection();
+    }
+
+    private function buildRefinementSection(): string
+    {
+        $currentSteps = $this->plan->steps
+            ->map(fn ($step, $index) => ($index + 1).". \"{$step->title}\" ({$step->estimated_days} days) — {$step->description}")
+            ->implode("\n");
+
+        $refinement = $this->plan->latestRefinement;
+
+        $requestedChanges = collect($refinement?->tags ?? [])
+            ->map(fn ($tag) => self::TAG_INSTRUCTIONS[$tag] ?? null)
+            ->filter();
+
+        if ($refinement?->notes) {
+            $requestedChanges->push($refinement->notes);
+        }
+
+        $requestedChangesList = $requestedChanges
+            ->map(fn ($line) => "- {$line}")
+            ->implode("\n");
+
+        return <<<PROMPT
+            Current plan steps:
+            {$currentSteps}
+
+            Requested changes:
+            {$requestedChangesList}
+            PROMPT;
     }
 
     public function failed(Throwable $exception): void
     {
+        // A failed refinement must leave the plan exactly as it was — the
+        // user already had a working plan, and losing it behind a dead-end
+        // "failed" screen (whose only recovery path is starting a brand new
+        // plan) would be worse than just reporting that this attempt didn't
+        // take.
+        if ($this->isRefinement) {
+            $this->plan->update(['status' => 'ready']);
+            $this->plan->latestRefinement?->update(['status' => 'failed']);
+
+            return;
+        }
+
         $this->plan->update([
             'status' => 'failed',
             'error_message' => $exception->getMessage(),

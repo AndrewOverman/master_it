@@ -32,6 +32,14 @@ class PlanResource extends JsonResource
                 $request->user()?->id === $this->user_id,
                 $this->share_token_expires_at?->toISOString()
             ),
+            // Closure-wrapped (not a bare value like share_token above)
+            // because latestRefinement is a relationship access — a bare
+            // value would evaluate (and query) unconditionally before
+            // when() ever checks ownership.
+            'latest_refinement' => $this->when(
+                $request->user()?->id === $this->user_id,
+                fn () => $this->latestRefinement ? new PlanRefinementResource($this->latestRefinement) : null
+            ),
             'steps' => PlanStepResource::collection($this->whenLoaded('steps')),
         ];
     }
