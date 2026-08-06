@@ -24,7 +24,7 @@ class UserController extends Controller
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'current_password' => ['required_with:password', 'string'],
-            'password' => ['sometimes', 'required', 'string', Password::min(8)->mixedCase()->numbers()->uncompromised()],
+            'password' => ['sometimes', 'required', 'string', Password::min(8)->mixedCase()->numbers()],
         ]);
 
         if (isset($validated['password']) && ! Hash::check($validated['current_password'], $user->password)) {

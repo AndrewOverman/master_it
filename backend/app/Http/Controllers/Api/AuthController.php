@@ -20,7 +20,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()->uncompromised()],
+            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()],
         ]);
 
         $user = User::create([
@@ -89,7 +89,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'string', 'email'],
             'token' => ['required', 'string'],
-            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()->uncompromised()],
+            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()],
         ]);
 
         $status = PasswordBroker::reset(
