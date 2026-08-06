@@ -23,6 +23,16 @@ const TIME_COMMITMENTS: { label: string; value: TimeCommitment }[] = [
   { label: 'Several hrs/day', value: 'intensive' },
 ];
 
+// `days: null` marks "Custom" — selecting it reveals the raw weeks/days
+// fields below instead of setting a fixed length.
+const DURATION_PRESETS: { label: string; days: number | null }[] = [
+  { label: '2 weeks', days: 14 },
+  { label: '1 month', days: 30 },
+  { label: '3 months', days: 90 },
+  { label: '6 months', days: 180 },
+  { label: 'Custom', days: null },
+];
+
 // Short label for the chip vs. the fuller sentence it fills in — keeps the
 // row scannable while still handing the model a well-formed prompt.
 const EXAMPLE_PROMPTS: { label: string; prompt: string }[] = [
@@ -42,13 +52,30 @@ export function NewPlanScreen({ navigation }: any) {
   const [timeCommitment, setTimeCommitment] = useState<TimeCommitment>('moderate');
   const [weeks, setWeeks] = useState('');
   const [days, setDays] = useState('');
+  const [durationPreset, setDurationPreset] = useState<string | null>(null);
   const requireOnline = useRequireOnline();
   const promptInputRef = useRef<TextInput>(null);
   const queryClient = useQueryClient();
 
+  // `??` is what makes this correctly self-resolve all three states: no
+  // preset picked (`undefined`, falls through to weeks/days — 0 if both are
+  // blank), a fixed preset (its literal day count, even if weeks/days still
+  // hold stale text from an earlier "Custom" selection), or "Custom"
+  // (`days` is `null`, which `??` also treats as "fall through").
+  const selectedDurationPreset = DURATION_PRESETS.find((preset) => preset.label === durationPreset);
+  const targetDays = selectedDurationPreset?.days ?? (parseInt(weeks, 10) || 0) * 7 + (parseInt(days, 10) || 0);
+
   const handleExamplePress = (example: string) => {
     setPrompt(example);
     promptInputRef.current?.focus();
+  };
+
+  const handleDurationPresetPress = (preset: (typeof DURATION_PRESETS)[number]) => {
+    setDurationPreset(preset.label);
+    if (preset.days !== null) {
+      setWeeks('');
+      setDays('');
+    }
   };
 
   const mutation = useMutation({
@@ -75,7 +102,6 @@ export function NewPlanScreen({ navigation }: any) {
 
     if (!requireOnline('generate a new plan')) return;
 
-    const targetDays = (parseInt(weeks, 10) || 0) * 7 + (parseInt(days, 10) || 0);
     if (targetDays > 365) {
       Alert.alert('That\'s a long plan', 'Plans can span up to 365 days.');
       return;
@@ -168,36 +194,60 @@ export function NewPlanScreen({ navigation }: any) {
         ))}
       </View>
 
-      <Text style={styles.sectionLabel}>Plan Duration?</Text>
-      <View style={styles.durationRow}>
-        <View style={styles.durationField}>
-          <TextInput
-            style={styles.durationInput}
-            placeholder="0"
-            placeholderTextColor={colors.textPlaceholder}
-            value={weeks}
-            onChangeText={(text) => setWeeks(text.replace(/[^0-9]/g, ''))}
-            keyboardType="number-pad"
-            maxLength={3}
-            editable={!mutation.isPending}
-          />
-          <Text style={styles.durationUnit}>weeks</Text>
-        </View>
-        <View style={styles.durationField}>
-          <TextInput
-            style={styles.durationInput}
-            placeholder="0"
-            placeholderTextColor={colors.textPlaceholder}
-            value={days}
-            onChangeText={(text) => setDays(text.replace(/[^0-9]/g, ''))}
-            keyboardType="number-pad"
-            maxLength={2}
-            editable={!mutation.isPending}
-          />
-          <Text style={styles.durationUnit}>days</Text>
-        </View>
+      <Text style={styles.sectionLabel}>Plan Duration</Text>
+      <View style={styles.optionRow}>
+        {DURATION_PRESETS.map((preset) => (
+          <TouchableOpacity
+            key={preset.label}
+            style={[styles.optionChip, durationPreset === preset.label && styles.optionChipSelected]}
+            onPress={() => handleDurationPresetPress(preset)}
+            disabled={mutation.isPending}
+          >
+            <Text
+              style={[
+                styles.optionChipText,
+                durationPreset === preset.label && styles.optionChipTextSelected,
+              ]}
+            >
+              {preset.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      <Text style={styles.durationHint}>Leave blank for a default ~30-day plan.</Text>
+
+      {durationPreset === 'Custom' && (
+        <View style={styles.durationRow}>
+          <View style={styles.durationField}>
+            <TextInput
+              style={styles.durationInput}
+              placeholder="0"
+              placeholderTextColor={colors.textPlaceholder}
+              value={weeks}
+              onChangeText={(text) => setWeeks(text.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+              maxLength={3}
+              editable={!mutation.isPending}
+            />
+            <Text style={styles.durationUnit}>weeks</Text>
+          </View>
+          <View style={styles.durationField}>
+            <TextInput
+              style={styles.durationInput}
+              placeholder="0"
+              placeholderTextColor={colors.textPlaceholder}
+              value={days}
+              onChangeText={(text) => setDays(text.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+              maxLength={2}
+              editable={!mutation.isPending}
+            />
+            <Text style={styles.durationUnit}>days</Text>
+          </View>
+        </View>
+      )}
+      {targetDays === 0 && (
+        <Text style={styles.durationHint}>Leave blank for a default ~30-day plan.</Text>
+      )}
 
       <Button label="Build my plan" onPress={handleSubmit} loading={mutation.isPending} style={styles.submitButton} />
     </ScrollView>

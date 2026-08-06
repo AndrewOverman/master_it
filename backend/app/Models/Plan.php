@@ -87,6 +87,19 @@ class Plan extends Model
         return $this->share_token_expires_at !== null && $this->share_token_expires_at->isPast();
     }
 
+    /**
+     * The one place "is this share token usable" is decided — an unknown,
+     * expired, or not-yet-ready plan all collapse to null here, so every
+     * caller (the API resource lookup, the public web redirect) treats them
+     * identically rather than each re-implementing the same two checks.
+     */
+    public static function findValidByShareToken(string $token): ?self
+    {
+        $plan = static::where('share_token', $token)->first();
+
+        return ($plan && $plan->status === 'ready' && ! $plan->isShareTokenExpired()) ? $plan : null;
+    }
+
     public function revokeShareToken(): void
     {
         // update() is mass assignment and these are deliberately not

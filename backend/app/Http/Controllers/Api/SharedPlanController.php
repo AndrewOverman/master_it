@@ -34,11 +34,6 @@ class SharedPlanController extends Controller
      */
     private function findSharedPlan(string $token): Plan
     {
-        $plan = Plan::where('share_token', $token)->firstOrFail();
-
-        abort_unless($plan->status === 'ready', 404);
-        abort_if($plan->isShareTokenExpired(), 404);
-
-        return $plan;
+        return Plan::findValidByShareToken($token) ?? abort(404);
     }
 }

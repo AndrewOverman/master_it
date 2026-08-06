@@ -60,6 +60,11 @@ return [
         // production — see eas.json), so password-reset emails deep-link
         // into the right build instead of one that isn't installed.
         'scheme' => env('MOBILE_APP_SCHEME', 'masterit'),
+
+        // No App Store listing exists yet — left unset until there is one.
+        // The shared-plan landing page omits its "Get the app" link
+        // entirely rather than guess at a URL while this is empty.
+        'app_store_url' => env('APP_STORE_URL'),
     ],
 
 ];

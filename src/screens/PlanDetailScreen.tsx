@@ -8,8 +8,6 @@ import {
   ActivityIndicator,
   Share,
   Alert,
-  Animated,
-  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,7 +22,7 @@ import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
-import { EmptyState, Spinner } from '../components/ui';
+import { EmptyState, ProgressBar, Spinner } from '../components/ui';
 
 export function PlanDetailScreen({ route, navigation }: any) {
   const { planId } = route.params;
@@ -83,8 +81,12 @@ export function PlanDetailScreen({ route, navigation }: any) {
 
   const shareMutation = useMutation({
     mutationFn: () => sharePlan(planId),
+    // The web URL, not the bare masterit:// scheme — this resolves for a
+    // recipient whether or not they have the app installed (it lands on the
+    // backend's own redirect-then-fallback page), where the raw scheme
+    // would just silently fail to open for anyone without the app.
     onSuccess: (token) => {
-      const url = `masterit://plans/shared/${token}`;
+      const url = `${process.env.EXPO_PUBLIC_API_URL}/plans/shared/${token}`;
       Share.share({ message: `Check out my plan on Master It: ${url}`, url });
     },
     onError: () => {
@@ -193,19 +195,6 @@ export function PlanDetailScreen({ route, navigation }: any) {
   const totalSteps = plan?.steps.length ?? 0;
   const progressRatio = totalSteps > 0 ? completedCount / totalSteps : 0;
 
-  // Animates toward the new ratio (rather than jumping) both on first
-  // paint and on every check/uncheck, so progress always reads as a
-  // continuous fill instead of a layout snap.
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: progressRatio,
-      duration: 450,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progressAnim, progressRatio]);
-
   if (isLoading || !plan) {
     if (!isOnline) {
       return (
@@ -270,19 +259,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
         <Text style={styles.progress}>
           {completedCount} of {plan.steps.length} steps complete
         </Text>
-        <View style={styles.progressTrack} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}>
-          <Animated.View
-            style={[
-              styles.progressFill,
-              {
-                width: progressAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0%', '100%'],
-                }),
-              },
-            ]}
-          />
-        </View>
+        <ProgressBar ratio={progressRatio} animateOnMount style={styles.progressTrack} />
         {!isOnline && (
           <View style={styles.offlineRow}>
             <Ionicons name="cloud-offline-outline" size={13} color={colors.textPlaceholder} />
@@ -324,14 +301,7 @@ const createStyles = (colors: ThemeColors) =>
     header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
     progress: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
-    progressTrack: {
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.surfaceMuted,
-      marginTop: 10,
-      overflow: 'hidden',
-    },
-    progressFill: { height: '100%', borderRadius: 3, backgroundColor: colors.accent },
+    progressTrack: { marginTop: 10 },
     offlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
     offlineText: { flex: 1, fontSize: 12, color: colors.textPlaceholder },
     list: { padding: 20 },

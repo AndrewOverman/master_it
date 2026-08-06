@@ -3,6 +3,7 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { listFeaturedPlans, listPlans } from '../api/plans';
+import { getCurrentUser, type AuthUser } from '../api/auth';
 import { useCopyPlan } from '../hooks/useCopyPlan';
 import { PlanCard } from '../components/PlanCard';
 import { PlanLimitModal } from '../components/PlanLimitModal';
@@ -11,7 +12,7 @@ import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline } from '../lib/offline';
 import { FEATURED_OFFLINE_SAMPLE_KEY } from '../lib/queryPersistence';
-import { Button, EmptyState, Spinner } from '../components/ui';
+import { Avatar, Button, EmptyState, Spinner } from '../components/ui';
 import { radius } from '../theme/radius';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -59,6 +60,17 @@ export function FeaturedPlansScreen({ navigation }: any) {
     enabled: isOnline,
   });
   const isFirstTime = !isMyPlansLoading && (myPlans?.length ?? 0) === 0;
+
+  // Shares the ['user'] cache with AccountScreen — no extra request if that
+  // screen's already been visited this session. Deliberately not part of
+  // this screen's loading gate below: the greeting is an overlay on the
+  // feed, not content the feed depends on, so it should just pop in once
+  // it resolves rather than holding up everything else.
+  const { data: user } = useQuery({
+    queryKey: ['user'],
+    queryFn: getCurrentUser,
+    enabled: isOnline,
+  });
 
   const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
     useCopyPlan(navigation);
@@ -121,13 +133,16 @@ export function FeaturedPlansScreen({ navigation }: any) {
           }
         }}
         ListHeaderComponent={
-          isFirstTime ? (
-            <FirstPlanHero
-              colors={colors}
-              styles={styles}
-              onCreate={() => navigation.navigate('NewPlan')}
-            />
-          ) : null
+          <>
+            <GreetingHeader user={user} colors={colors} styles={styles} />
+            {isFirstTime ? (
+              <FirstPlanHero
+                colors={colors}
+                styles={styles}
+                onCreate={() => navigation.navigate('NewPlan')}
+              />
+            ) : null}
+          </>
         }
         ListEmptyComponent={<EmptyState message="No featured plans yet. Check back soon!" fullScreen={false} />}
         ListFooterComponent={
@@ -140,6 +155,34 @@ export function FeaturedPlansScreen({ navigation }: any) {
       />
       <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
     </>
+  );
+}
+
+// Renders nothing until the user query resolves, rather than a skeleton —
+// this is a personalization touch layered on top of the feed, not content
+// the screen depends on to be useful.
+function GreetingHeader({
+  user,
+  colors,
+  styles,
+}: {
+  user: AuthUser | undefined;
+  colors: ThemeColors;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  if (!user) return null;
+
+  const firstName = user.name.trim().split(/\s+/)[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+
+  return (
+    <View style={styles.greetingRow}>
+      <Avatar name={user.name} size={40} />
+      <Text style={styles.greetingText}>
+        {greeting}, {firstName}
+      </Text>
+    </View>
   );
 }
 
@@ -185,6 +228,13 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surfaceMuted,
     },
     offlineBannerText: { flex: 1, fontSize: 12.5, color: colors.textMuted },
+    greetingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.lg,
+    },
+    greetingText: { fontSize: typography.h3.fontSize, fontWeight: '700', color: colors.textPrimary },
     hero: {
       backgroundColor: colors.surface,
       borderWidth: 1,

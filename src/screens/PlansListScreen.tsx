@@ -11,7 +11,7 @@ import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
 import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
-import { EmptyState, Spinner } from '../components/ui';
+import { EmptyState, ProgressBar, Spinner } from '../components/ui';
 import { shadows } from '../theme/shadows';
 
 export function PlansListScreen({ navigation, route }: any) {
@@ -203,6 +203,12 @@ export function PlansListScreen({ navigation, route }: any) {
                 ? `${item.steps.filter((s) => s.completed_at).length}/${item.steps.length} steps complete`
                 : item.status}
             </Text>
+            {item.status === 'ready' && item.steps.length > 0 && (
+              <ProgressBar
+                ratio={item.steps.filter((s) => s.completed_at).length / item.steps.length}
+                style={styles.rowProgressTrack}
+              />
+            )}
           </View>
           {showComplete && (
             <Ionicons name="checkmark-circle" size={24} color={colors.success} style={styles.completeIcon} />
@@ -289,6 +295,7 @@ const createStyles = (colors: ThemeColors) =>
     planTitleDone: { textDecorationLine: 'line-through', color: colors.textPlaceholder },
     completeIcon: { marginLeft: 10 },
     planMeta: { fontSize: 13, color: colors.textMuted, marginTop: 4, textTransform: 'capitalize' },
+    rowProgressTrack: { marginTop: 8 },
     swipeAction: {
       width: 96,
       alignItems: 'center',
