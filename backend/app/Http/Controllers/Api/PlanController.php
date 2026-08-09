@@ -265,5 +265,4 @@ class PlanController extends Controller
 
         return response()->noContent();
     }
-
 }
