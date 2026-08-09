@@ -40,11 +40,6 @@ class User extends Authenticatable
         return $this->hasMany(Plan::class);
     }
 
-    public function deviceAttestations(): HasMany
-    {
-        return $this->hasMany(DeviceAttestation::class, 'claimed_by_user_id');
-    }
-
     public function hasActiveSubscription(): bool
     {
         return $this->subscription_expires_at !== null

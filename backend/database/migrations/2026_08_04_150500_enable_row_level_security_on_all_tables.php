@@ -16,8 +16,8 @@ return new class extends Migration
      * New tables don't inherit RLS retroactively — enable it directly in
      * the migration that creates them instead of adding it here. This
      * list is a one-time backfill for tables that predate that rule
-     * (`plan_refinements` and `device_attestations` enable it themselves,
-     * in their own create-table migrations).
+     * (`plan_refinements` enables it itself, in its own create-table
+     * migration).
      */
     private const TABLES = [
         'users',
