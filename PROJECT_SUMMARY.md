@@ -95,6 +95,12 @@ placeholder icon when a plan has none.
   backend.
 - **Required secrets** (local-only, in `backend/.env`, gitignored):
   Supabase DB credentials, `ANTHROPIC_API_KEY`.
+- **Pre-commit hook**: `.githooks/pre-commit` runs `pint --test` on staged PHP
+  files, so a style violation fails locally instead of failing CI before the
+  backend tests get to run. `npm install` enables it (the root `prepare`
+  script sets `core.hooksPath`); by hand it's
+  `git config core.hooksPath .githooks`. It no-ops when `backend/vendor` isn't
+  installed, and `git commit --no-verify` skips it.
 
 ## Environments (dev / staging / production)
 

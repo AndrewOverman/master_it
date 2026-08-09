@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# Runs Laravel Pint over the staged PHP files so a style violation fails here
+# rather than in CI, where it blocks the whole Backend job before the tests
+# even run.
+#
+# Enabled by `npm install` (the root "prepare" script points core.hooksPath at
+# this directory). To wire it up by hand:
+#
+#     git config core.hooksPath .githooks
+#
+# To bypass it for one commit: git commit --no-verify
+
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+pint="$repo_root/backend/vendor/bin/pint"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR -- 'backend/*.php')
+[ -n "$staged" ] || exit 0
+
+if [ ! -x "$pint" ]; then
+    echo "pre-commit: $pint not found — run 'composer install' in backend/." >&2
+    echo "pre-commit: skipping the Pint check for this commit." >&2
+    exit 0
+fi
+
+# Pint takes paths relative to the working directory, and the file list is
+# repo-relative, so run from the repo root rather than from backend/.
+cd "$repo_root" || exit 1
+
+if ! echo "$staged" | xargs "$pint" --test; then
+    echo >&2
+    echo "pre-commit: Pint found style issues in the staged PHP files." >&2
+    echo "pre-commit: fix them with 'cd backend && vendor/bin/pint', then restage." >&2
+    exit 1
+fi
