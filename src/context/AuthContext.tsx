@@ -20,7 +20,7 @@ interface AuthContextValue {
   sessionExpired: boolean;
   // `userId` is required because it's what gets handed to RevenueCat as the
   // app_user_id — see identifyPurchasesUser(). The login/register responses
-  // already carry it; it used to be discarded here.
+  // already carry it, so callers have it to hand.
   signIn: (token: string, userId: number) => Promise<void>;
   signOut: () => Promise<void>;
   // Drops the local session without calling POST /logout. For when the account

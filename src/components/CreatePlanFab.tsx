@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -14,9 +14,9 @@ import { spacing } from '../theme/spacing';
 // contextual (e.g. distinguishing "start fresh" from Featured's per-card
 // "Copy" action) without diverging on the pattern itself.
 // Offset is a plain 20 rather than `insets.bottom + 20`: every screen showing
-// this FAB now sits inside a tab navigator, and the tab bar already absorbs
-// the bottom safe-area inset. Adding it again here left the button floating a
-// visible gap above the bar.
+// this FAB sits inside a tab navigator, and the tab bar already absorbs the
+// bottom safe-area inset. Adding it again floats the button a visible gap
+// above the bar.
 export function CreatePlanFab({ label, onPress }: { label: string; onPress: () => void }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);

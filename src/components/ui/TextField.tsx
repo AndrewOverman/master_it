@@ -1,4 +1,4 @@
-import React, { forwardRef, useMemo, useState } from 'react';
+import { forwardRef, useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -21,9 +21,8 @@ interface TextFieldProps extends TextInputProps {
   containerStyle?: StyleProp<ViewStyle>;
   /**
    * Validation message for this field. Setting it reddens the border and
-   * prints the message underneath — the app used to raise these as
-   * `Alert.alert`, which interrupted, blocked, and never pointed at which
-   * field was actually wrong.
+   * prints the message underneath, rather than raising an `Alert` that
+   * interrupts, blocks, and never says which field is wrong.
    */
   error?: string | null;
   /** Persistent guidance shown under the field while there's no error. */

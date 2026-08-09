@@ -27,9 +27,9 @@ export const lightColors: ThemeColors = {
   textPrimary: '#2B2420', // 14.5:1
   textSecondary: '#52463C', // 8.7:1
   textMuted: '#7A6B5D', // 4.9:1
-  // Was #96806F, which was 3.5:1 — a fail, and this token is used for due
-  // dates, offline notices and progress labels, not just placeholders.
-  // 5.3:1 now, and still clears 4.5:1 on `surface` and `surfaceMuted`.
+  // 5.3:1, and clears 4.5:1 on `surface` and `surfaceMuted` too. Held to the
+  // AA normal-text bar despite the name: this token carries due dates,
+  // offline notices and progress labels, not just input placeholders.
   textPlaceholder: '#7A6355',
   accent: '#B84F1E', // 4.8:1
   // KNOWN ISSUE: `accent` text on this is 3.9:1, which fails AA — it's the
@@ -54,9 +54,8 @@ export const darkColors: ThemeColors = {
   textPrimary: '#F9FAFB', // 18.4:1
   textSecondary: '#D1D5DB', // 13.0:1
   textMuted: '#9CA3AF', // 7.6:1
-  // Was #6B7280 at 4.0:1 — the same failure as the light theme's, which the
-  // audit only caught on the light side. 6.1:1 now, and clears 4.5:1 on
-  // `surface` and `surfaceMuted` too.
+  // 6.1:1, and clears 4.5:1 on `surface` and `surfaceMuted` too — held to
+  // the same AA bar as the light theme's, for the same reason.
   textPlaceholder: '#8A929E',
   accent: '#60A5FA',
   accentMuted: '#1E3A5C',

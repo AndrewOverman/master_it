@@ -119,7 +119,7 @@ export async function submitPlanFeedback(
 }
 
 // GET /api/v1/plans
-// List all of the user's plans, for a home/history screen later
+// Every plan the user owns, in one shot — backs both Today and All Plans.
 export async function listPlans(): Promise<Plan[]> {
   const { data } = await apiClient.get<Plan[]>('/api/v1/plans');
   return data;
@@ -156,12 +156,6 @@ export async function getRelatedPlans(planId: number): Promise<Plan[]> {
 export async function sharePlan(planId: number): Promise<string> {
   const { data } = await apiClient.post<{ share_token: string }>(`/api/v1/plans/${planId}/share`);
   return data.share_token;
-}
-
-// DELETE /api/v1/plans/{planId}/share
-// Owner-only. Revokes the share link — anyone still holding it gets a 404.
-export async function unsharePlan(planId: number): Promise<void> {
-  await apiClient.delete(`/api/v1/plans/${planId}/share`);
 }
 
 // GET /api/v1/plans/shared/{token}

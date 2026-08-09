@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -8,10 +8,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
 interface OfflineNoticeProps {
-  /**
-   * What the user can't do right now. Defaults to the editing message, which
-   * is what three of the four call sites were already saying.
-   */
+  /** What the user can't do right now. Defaults to the editing message. */
   message?: string;
   /** Relative time of the last successful fetch, e.g. "2 minutes ago". */
   syncedLabel?: string | null;
@@ -24,13 +21,13 @@ interface OfflineNoticeProps {
 }
 
 /**
- * The single way this app says "you're offline".
+ * The single way this app says "you're offline" — every screen renders this
+ * one component rather than its own icon-and-text row, so the message can't
+ * drift in weight, colour, or wording between screens.
  *
- * There were three: an edge-to-edge bar on Explore, a rounded card inside the
- * list on All Plans, and a bare icon+text row on Plan and Step Detail — three
- * different weights and two different text colours for the same message. The
- * inset card is the one that survives, since it reads as a notice rather than
- * as part of the content.
+ * An inset card by default, since that reads as a notice rather than as part
+ * of the content; `fullWidth` is the exception, for a bar pinned under a
+ * header.
  */
 export function OfflineNotice({
   message = "Editing is disabled until you're back online.",
@@ -74,9 +71,9 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing.lg,
       marginBottom: 0,
     },
-    // textSecondary, not the textMuted/textPlaceholder the old three versions
-    // used. This text sits on surfaceMuted at 12px, and on that background
-    // textMuted is only 4.43:1 — under AA. textSecondary is 7.9:1. The icon
-    // can stay textMuted, since graphics only need 3:1.
+    // textSecondary, not textMuted: this text sits on surfaceMuted at 12px,
+    // and on that background textMuted is only 4.43:1 — under AA.
+    // textSecondary is 7.9:1. The icon can stay textMuted, since graphics
+    // only need 3:1.
     text: { flex: 1, fontSize: typography.small.fontSize, color: colors.textSecondary },
   });

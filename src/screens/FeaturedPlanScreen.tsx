@@ -1,9 +1,8 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { getPlan } from '../api/plans';
 import { useCopyPlan } from '../hooks/useCopyPlan';
-import { PlanLimitModal } from '../components/PlanLimitModal';
 import type { PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
@@ -27,9 +26,8 @@ const TIME_LABELS: Record<string, string> = {
 /**
  * Read-only look at a featured plan before adding it.
  *
- * The feed used to make "add" the only thing you could do with a card, so
- * people committed to a plan without ever seeing what was in it. This is the
- * step list, plus the same add action.
+ * Every route into "add this plan" goes through here, so nobody commits to a
+ * plan without first seeing what's in it — the step list, then the add action.
  *
  * Deliberately similar to SharedPlanScreen, which does the same job for a
  * shared link — they differ in where the plan comes from (id vs. token) and
@@ -47,8 +45,7 @@ export function FeaturedPlanScreen({ route, navigation }: any) {
     retry: false,
   });
 
-  const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
-    useCopyPlan(navigation);
+  const { copyMutation, handleCopyPress } = useCopyPlan(navigation);
 
   if (isLoading) return <Spinner fullScreen />;
 
@@ -82,11 +79,6 @@ export function FeaturedPlanScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <PlanLimitModal
-        visible={limitModalVisible}
-        message={limitModalMessage}
-        onDismiss={dismissLimitModal}
-      />
       <FlatList
         data={[...plan.steps].sort((a, b) => a.order - b.order)}
         keyExtractor={(step) => String(step.id)}

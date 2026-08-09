@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Plan } from '../types/plan';
@@ -30,12 +30,10 @@ export function PlanCard({
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  // The whole card opens a preview, and that's the only thing it does. It
-  // used to carry a bare "+" that copied the plan on one unlabelled tap —
-  // first as the card's *only* affordance, then alongside the preview once
-  // that existed. Either way it asked for a commitment without ever showing
-  // what was being committed to, so the preview (which has a labelled "Add to
-  // My Plans") is now the single path in.
+  // The whole card opens a preview, and that's the only thing it does — no
+  // one-tap "add" affordance here. Adding a plan is a commitment, and the
+  // preview (with its labelled "Add to My Plans") is the single path in, so
+  // it can't be made without seeing what's being committed to.
   return (
     <TouchableOpacity
       style={styles.card}

@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 
 class SharedPlanController extends Controller
 {
-    public function show(Request $request, string $token)
+    public function show(string $token)
     {
         $plan = $this->findSharedPlan($token);
 

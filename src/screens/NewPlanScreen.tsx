@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -143,8 +143,8 @@ export function NewPlanScreen({ navigation }: any) {
   });
 
   const handleSubmit = () => {
-    // Both of these used to be alerts, which covered the very field they were
-    // complaining about. They're now printed under it instead.
+    // Printed under the offending field rather than raised as alerts, which
+    // would cover the very field they're complaining about.
     const promptProblem =
       prompt.trim().length < 5 ? 'Describe what you want to learn in a sentence or two.' : null;
     const durationProblem = targetDays > 365 ? 'Plans can span up to 365 days.' : null;
@@ -182,8 +182,8 @@ export function NewPlanScreen({ navigation }: any) {
               {user?.generation_limit_message ?? "You're out of plan generations."}
             </Text>
           </View>
-          {/* Previously this notice ended here — it told the user to
-              subscribe and gave them no way to do it. */}
+          {/* The way out. Telling someone to subscribe without giving them
+              somewhere to do it is a dead end. */}
           <TouchableOpacity
             onPress={() => navigation.navigate('Paywall')}
             style={styles.limitNoticeAction}

@@ -204,7 +204,7 @@ class PlanController extends Controller
         return response()->json(null, 201);
     }
 
-    public function featured(Request $request)
+    public function featured()
     {
         $plans = Plan::with('steps')
             ->where('is_featured', true)

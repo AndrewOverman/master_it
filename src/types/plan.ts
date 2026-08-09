@@ -1,5 +1,6 @@
-// Types matching the Laravel API response shapes.
-// Keep these in sync with your Laravel API Resources.
+// Types matching the Laravel API response shapes. Hand-synced with the
+// resources that produce them — backend/app/Http/Resources/{Plan,PlanStep,
+// PlanRefinement,StepResource}Resource.php.
 
 export type PlanStatus = 'generating' | 'ready' | 'failed' | 'rejected';
 

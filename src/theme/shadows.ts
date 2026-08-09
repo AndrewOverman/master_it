@@ -1,8 +1,8 @@
 import type { ViewStyle } from 'react-native';
 
-// Consolidates the two shadow "recipes" that were previously hand-copied
-// with slightly different values in PlanCompleteOverlay, PlanLimitModal,
-// RefinePlanModal, and the My Plans FAB.
+// The app's two elevation recipes: `card` for modals and raised surfaces,
+// `fab` for the floating action button. Kept here so every lifted surface
+// casts the same shadow instead of each one hand-rolling its own values.
 export const shadows: Record<'card' | 'fab', ViewStyle> = {
   card: {
     shadowColor: '#000',

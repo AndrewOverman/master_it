@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -31,17 +31,6 @@ interface ActionSheetProps {
   onDismiss: () => void;
 }
 
-/**
- * Bottom sheet of actions for a single item.
- *
- * Exists because row actions used to be reachable only by swiping, with no
- * affordance saying so — a user who never guessed the gesture had no way to
- * complete or reset a plan at all. The swipe stays as a shortcut; this is the
- * visible path to the same actions.
- *
- * Hand-rolled rather than ActionSheetIOS so Android gets the same thing, and
- * so it inherits the app's own surface/radius/color tokens.
- */
 const ENTER_MS = 240;
 const EXIT_MS = 180;
 
@@ -49,6 +38,17 @@ const EXIT_MS = 180;
 // has to be taller than any real sheet so it starts fully offscreen.
 const UNMEASURED_SHEET_HEIGHT = 600;
 
+/**
+ * Bottom sheet of actions for a single item.
+ *
+ * The visible path to row actions that are otherwise reachable only by
+ * swiping — a gesture with no affordance announcing it, which left anyone who
+ * never guessed it unable to complete or reset a plan at all. The swipe stays
+ * as a shortcut for those who know it.
+ *
+ * Hand-rolled rather than ActionSheetIOS so Android gets the same thing, and
+ * so it inherits the app's own surface/radius/color tokens.
+ */
 export function ActionSheet({ visible, title, actions, onDismiss }: ActionSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();

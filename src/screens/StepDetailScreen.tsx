@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -78,10 +78,10 @@ export function StepDetailScreen({ route, navigation }: any) {
   // this is usually free. Needed for "what comes after this one".
   const { data: plan } = useQuery({ queryKey: ['plan', planId], queryFn: () => getPlan(planId) });
 
-  // The header used to carry the step's title, which is already the H1
-  // immediately below it — so a long title got truncated twice on one screen
-  // and the header's whole width went to repeating a word and a half. The
-  // position is information the screen doesn't otherwise show.
+  // The header carries the step's position, not its title: the title is
+  // already the H1 immediately below, so repeating it there spends the whole
+  // header width truncating the same long string twice. Where this step sits
+  // in the plan is information the screen doesn't otherwise show.
   useEffect(() => {
     if (!plan) return;
     const ordered = [...plan.steps].sort((a, b) => a.order - b.order);
