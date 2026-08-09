@@ -35,6 +35,12 @@ class PlanStepController extends Controller
             'due_date' => ['sometimes', 'nullable', 'date'],
         ]);
 
+        // Steps stay editable for the life of the plan, including after every
+        // one of them is checked off — a mis-tap on the last step shouldn't
+        // cost the user their plan. Crossing the "all done" line again simply
+        // replays the completion celebration; its feedback prompt is an
+        // upsert (see PlanController::feedback), so only the latest review
+        // is kept no matter how many times that happens.
         $updates = [];
         if (array_key_exists('completed', $validated)) {
             $updates['completed_at'] = $validated['completed'] ? now() : null;

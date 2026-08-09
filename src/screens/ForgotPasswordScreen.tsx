@@ -14,6 +14,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
   const mutation = useMutation({
@@ -25,10 +26,14 @@ export function ForgotPasswordScreen({ navigation }: any) {
   });
 
   const handleSubmit = () => {
-    if (!email.trim()) {
-      Alert.alert('Missing info', 'Please enter your email.');
-      return;
-    }
+    const problem = !email.trim()
+      ? 'Enter your email address.'
+      : !/^\S+@\S+\.\S+$/.test(email.trim())
+        ? 'That doesn’t look like an email address.'
+        : null;
+
+    setEmailError(problem);
+    if (problem) return;
     mutation.mutate();
   };
 
@@ -62,11 +67,19 @@ export function ForgotPasswordScreen({ navigation }: any) {
           <TextField
             placeholder="Email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (emailError) setEmailError(null);
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
+            textContentType="username"
+            autoComplete="username"
+            returnKeyType="go"
+            onSubmitEditing={handleSubmit}
             editable={!mutation.isPending}
+            error={emailError}
           />
 
           <Button label="Send reset link" onPress={handleSubmit} loading={mutation.isPending} />
@@ -75,6 +88,8 @@ export function ForgotPasswordScreen({ navigation }: any) {
             style={styles.toggleButton}
             onPress={() => navigation.goBack()}
             disabled={mutation.isPending}
+            accessibilityRole="button"
+            accessibilityLabel="Back to log in"
           >
             <Text style={styles.toggleText}>Back to log in</Text>
           </TouchableOpacity>

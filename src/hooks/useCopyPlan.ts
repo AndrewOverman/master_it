@@ -5,9 +5,10 @@ import { copyPlan } from '../api/plans';
 import type { Plan } from '../types/plan';
 import { useRequireOnline } from '../lib/offline';
 
-// Shared by any screen that shows copyable plan cards (Featured feed,
-// Related Plans) — confirm dialog, then clone into the user's own
-// plans and jump straight to it.
+// Shared by the read-only preview screens (FeaturedPlan, SharedPlan) —
+// confirm dialog, then clone into the user's own plans and jump straight to
+// it. The feed and Related Plans used to copy directly from a card; they now
+// route through a preview, so adding always happens with the steps in view.
 export function useCopyPlan(navigation: any) {
   const queryClient = useQueryClient();
   const requireOnline = useRequireOnline();
@@ -17,7 +18,10 @@ export function useCopyPlan(navigation: any) {
     mutationFn: copyPlan,
     onSuccess: (newPlan) => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      navigation.navigate('PlanDetail', { planId: newPlan.id });
+      // Tab-qualified because this hook runs from both tabs: the Featured
+      // feed lives under Explore, but the copy it just made is the user's
+      // own plan, and those only exist in the Plans stack.
+      navigation.navigate('Today', { screen: 'PlanDetail', params: { planId: newPlan.id } });
     },
     onError: (error: any) => {
       const message =

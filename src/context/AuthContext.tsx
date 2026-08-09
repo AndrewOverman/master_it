@@ -1,7 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { logout as logoutRequest } from '../api/auth';
+import { getCurrentUser, logout as logoutRequest } from '../api/auth';
 import { setSessionExpiredListener } from '../api/sessionEvents';
-import { getToken, setToken, deleteToken } from '../utils/tokenStorage';
+import {
+  getToken,
+  setToken,
+  deleteToken,
+  getStoredUserId,
+  setStoredUserId,
+  deleteStoredUserId,
+} from '../utils/tokenStorage';
+import { identifyPurchasesUser, resetPurchasesUser } from '../lib/purchases';
 
 interface AuthContextValue {
   // null while the initial SecureStore check is still pending
@@ -10,38 +18,94 @@ interface AuthContextValue {
   // deliberate log out — LoginScreen reads this to show a short explanation
   // instead of silently dropping the user back on the form.
   sessionExpired: boolean;
-  signIn: (token: string) => Promise<void>;
+  // `userId` is required because it's what gets handed to RevenueCat as the
+  // app_user_id — see identifyPurchasesUser(). The login/register responses
+  // already carry it; it used to be discarded here.
+  signIn: (token: string, userId: number) => Promise<void>;
   signOut: () => Promise<void>;
+  // Drops the local session without calling POST /logout. For when the account
+  // itself is gone — the token has already been revoked server-side, so the
+  // logout request could only 401.
+  clearSession: () => Promise<void>;
   clearSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Everything torn down locally when a session ends, however it ended. The
+// RevenueCat reset belongs here rather than only in signOut(): whoever signs
+// in next on this device must not inherit the previous account's
+// entitlements, and that's just as true after a 401 as after a deliberate
+// log out.
+async function clearLocalSession(): Promise<void> {
+  await deleteToken();
+  await deleteStoredUserId();
+  await resetPurchasesUser();
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
+  // Restoring a session also has to re-identify the user to RevenueCat, or a
+  // returning user is anonymous to it until they next sign in — and a
+  // purchase made in that window would be attributed to an anonymous ID the
+  // webhook can't resolve back to an account.
   useEffect(() => {
-    getToken()
-      .then((token) => setIsAuthenticated(!!token))
-      .catch(() => setIsAuthenticated(false));
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const token = await getToken();
+        if (cancelled) return;
+        setIsAuthenticated(!!token);
+        if (!token) return;
+
+        // Sessions that predate this ID being persisted have a token but no
+        // stored ID. Fetching it once heals them in place — otherwise that
+        // whole cohort stays anonymous to RevenueCat until they sign out and
+        // back in, which nobody has a reason to do.
+        let userId = await getStoredUserId();
+        if (userId === null) {
+          userId = (await getCurrentUser()).id;
+          await setStoredUserId(userId);
+        }
+        if (cancelled) return;
+
+        await identifyPurchasesUser(userId);
+      } catch {
+        // A failure to restore the RevenueCat identity must not cost the user
+        // their session — the token is what authenticates them. The paywall
+        // identifies again before purchasing.
+        if (!cancelled) setIsAuthenticated((current) => current ?? false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Registered once so the axios interceptor (outside the React tree) can
   // force a sign-out on 401.
   useEffect(() => {
     setSessionExpiredListener(() => {
-      deleteToken();
+      clearLocalSession();
       setSessionExpired(true);
       setIsAuthenticated(false);
     });
     return () => setSessionExpiredListener(null);
   }, []);
 
-  const signIn = async (token: string) => {
+  const signIn = async (token: string, userId: number) => {
     await setToken(token);
+    await setStoredUserId(userId);
     setSessionExpired(false);
     setIsAuthenticated(true);
+    // After the session is live, not before: identifying is a network call to
+    // RevenueCat, and it failing (offline, misconfigured keys) must not turn
+    // a successful login into a failed one.
+    await identifyPurchasesUser(userId).catch(() => {});
   };
 
   const signOut = async () => {
@@ -50,10 +114,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // best-effort — still clear the local token even if the request fails
     }
-    await deleteToken();
+    await clearLocalSession();
     // A deliberate log out is never a "session expired" — even if the
     // logout request itself 401'd (token already invalid server-side) and
     // the interceptor above fired first, this has the final word.
+    setSessionExpired(false);
+    setIsAuthenticated(false);
+  };
+
+  const clearSession = async () => {
+    await clearLocalSession();
     setSessionExpired(false);
     setIsAuthenticated(false);
   };
@@ -62,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, sessionExpired, signIn, signOut, clearSessionExpired }}
+      value={{ isAuthenticated, sessionExpired, signIn, signOut, clearSession, clearSessionExpired }}
     >
       {children}
     </AuthContext.Provider>

@@ -5,6 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getPlan } from '../api/plans';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { Button } from '../components/ui';
+import { typography } from '../theme/typography';
+import { spacing } from '../theme/spacing';
 
 // Generation has no real backend progress signal (GeneratePlanSteps flips
 // status once, start to finish), so these stages are a timed simulation
@@ -21,6 +24,14 @@ const STAGE_INTERVAL_MS = 3200;
 const PROGRESS_DURATION_MS = STAGE_INTERVAL_MS * STAGES.length;
 const COMPLETE_HOLD_MS = 450;
 
+// Roughly 3x the staged run above, i.e. well past "normal but slow". Past
+// this point the wait stops being a progress bar and starts being a trap —
+// a dead queue worker looks exactly like a slow one from here — so the copy
+// levels with the user and an explicit way out appears. Deliberately not a
+// hard failure: the job may well still land, and the plan is already saved
+// either way, so leaving costs nothing.
+const SLOW_AFTER_MS = 45000;
+
 // Polls GET /api/v1/plans/{id} until the queued generation job finishes,
 // then routes to the appropriate next screen.
 export function GeneratingScreen({ route, navigation }: any) {
@@ -31,13 +42,27 @@ export function GeneratingScreen({ route, navigation }: any) {
   const { data: plan } = useQuery({
     queryKey: ['plan', planId],
     queryFn: () => getPlan(planId),
-    refetchInterval: (query) => (query.state.data?.status === 'generating' ? 2000 : false),
+    // Keep polling until a terminal status actually comes back. Testing for
+    // `=== 'generating'` instead would stop polling forever the moment a
+    // fetch errored (data stays undefined, so the check fails and returns
+    // false) — the screen would then sit at "Almost there…" for good even
+    // after the connection recovered.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && status !== 'generating' ? false : 2000;
+    },
   });
 
   const [stageIndex, setStageIndex] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
   const subtitleOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsSlow(true), SLOW_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const timers = STAGES.slice(1).map((_, i) =>
@@ -96,32 +121,53 @@ export function GeneratingScreen({ route, navigation }: any) {
         )}
       </View>
 
-      <Text style={styles.title}>{isComplete ? 'Your plan is ready!' : 'Building your plan…'}</Text>
+      <Text style={styles.title}>
+        {isComplete ? 'Your plan is ready!' : isSlow ? 'Still working on it' : 'Building your plan…'}
+      </Text>
 
       <Animated.Text style={[styles.subtitle, { opacity: subtitleOpacity }]}>
-        {isComplete ? 'Opening it now…' : STAGES[stageIndex]}
+        {isComplete
+          ? 'Opening it now…'
+          : isSlow
+            ? 'This one is taking longer than usual.'
+            : STAGES[stageIndex]}
       </Animated.Text>
 
       <View style={styles.track}>
         <Animated.View style={[styles.fill, { width: fillWidth }]} />
       </View>
+
+      {isSlow && !isComplete && (
+        <View style={styles.slowBlock}>
+          <Text style={styles.slowNote}>
+            You don't have to wait here — your plan keeps building on its own. It'll be in My Plans
+            when it's done.
+          </Text>
+          <Button
+            label="Go to My Plans"
+            variant="secondary"
+            onPress={() => navigation.replace('PlansList')}
+            style={styles.slowButton}
+          />
+        </View>
+      )}
     </View>
   );
 }
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background },
-    iconWrap: { height: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-    title: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-    subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
+    container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: colors.background },
+    iconWrap: { height: 48, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+    title: { fontSize: typography.h3.fontSize, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+    subtitle: { fontSize: typography.label.fontSize, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
     track: {
       width: '100%',
       maxWidth: 220,
       height: 6,
       borderRadius: 3,
       backgroundColor: colors.borderMuted,
-      marginTop: 24,
+      marginTop: spacing.xl,
       overflow: 'hidden',
     },
     fill: {
@@ -129,4 +175,13 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 3,
       backgroundColor: colors.accent,
     },
+    slowBlock: { marginTop: 28, width: '100%', maxWidth: 320, alignItems: 'center' },
+    slowNote: {
+      fontSize: typography.caption.fontSize,
+      lineHeight: typography.caption.lineHeight,
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginBottom: spacing.md,
+    },
+    slowButton: { alignSelf: 'stretch' },
   });

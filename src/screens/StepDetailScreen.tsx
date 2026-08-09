@@ -15,13 +15,19 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getStep, setStepDueDate } from '../api/plans';
+import { getPlan, getStep, setStepDueDate } from '../api/plans';
 import type { Plan, PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
-import { Button, EmptyState, Spinner } from '../components/ui';
+import { formatDueDate } from '../utils/dueDate';
+import { useToggleStep } from '../hooks/useToggleStep';
+import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
+import { Button, EmptyState, OfflineNotice, Spinner } from '../components/ui';
+import { typography } from '../theme/typography';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
 function getYouTubeVideoId(url: string): string | null {
   const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -68,11 +74,25 @@ export function StepDetailScreen({ route, navigation }: any) {
     initialDataUpdatedAt: planCachedAt,
   });
 
+  // Shares the ['plan', planId] cache the detail screen already fills, so
+  // this is usually free. Needed for "what comes after this one".
+  const { data: plan } = useQuery({ queryKey: ['plan', planId], queryFn: () => getPlan(planId) });
+
+  // The header used to carry the step's title, which is already the H1
+  // immediately below it — so a long title got truncated twice on one screen
+  // and the header's whole width went to repeating a word and a half. The
+  // position is information the screen doesn't otherwise show.
   useEffect(() => {
-    if (step) {
-      navigation.setOptions({ title: step.title });
-    }
-  }, [step, navigation]);
+    if (!plan) return;
+    const ordered = [...plan.steps].sort((a, b) => a.order - b.order);
+    const index = ordered.findIndex((s) => s.id === stepId);
+    navigation.setOptions({
+      title: index >= 0 ? `Step ${index + 1} of ${ordered.length}` : 'Step',
+    });
+  }, [plan, stepId, navigation]);
+
+  const [celebratingPlanId, setCelebratingPlanId] = useState<number | null>(null);
+  const { toggleStep } = useToggleStep(planId, setCelebratingPlanId);
 
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [pendingDate, setPendingDate] = useState<Date | null>(null);
@@ -144,6 +164,11 @@ export function StepDetailScreen({ route, navigation }: any) {
   const resourcesLoaded = step.resources !== undefined;
   const resources = step.resources ?? [];
   const syncedLabel = formatRelativeTime(dataUpdatedAt);
+  const due = step.due_date ? formatDueDate(step.due_date) : null;
+  const showOverdue = Boolean(due?.isOverdue) && !step.completed_at;
+  const isComplete = Boolean(step.completed_at);
+  const orderedSteps = plan ? [...plan.steps].sort((a, b) => a.order - b.order) : [];
+  const nextStep = orderedSteps[orderedSteps.findIndex((s) => s.id === stepId) + 1];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -151,19 +176,25 @@ export function StepDetailScreen({ route, navigation }: any) {
       <Text style={styles.description}>{step.description}</Text>
 
       {!isOnline && (
-        <View style={styles.offlineRow}>
-          <Ionicons name="cloud-offline-outline" size={13} color={colors.textPlaceholder} />
-          <Text style={styles.offlineText}>
-            You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
-          </Text>
-        </View>
+        <OfflineNotice syncedLabel={syncedLabel} style={styles.offlineNotice} />
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Aiming for</Text>
-        <TouchableOpacity style={styles.dueDateRow} onPress={openDateEditor}>
-          <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
-          <Text style={styles.dueDateText}>{step.due_date ? `Aiming for ${step.due_date}` : 'Set a target date'}</Text>
+        <Text style={styles.sectionLabel}>Target date</Text>
+        <TouchableOpacity
+          style={styles.dueDateRow}
+          onPress={openDateEditor}
+          accessibilityRole="button"
+          accessibilityLabel={due ? `Target date ${due.text}. Tap to change.` : 'Set a target date'}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={16}
+            color={showOverdue ? colors.destructive : colors.textMuted}
+          />
+          <Text style={[styles.dueDateText, showOverdue && styles.dueDateTextOverdue]}>
+            {due ? due.text : 'Set a target date'}
+          </Text>
           <Ionicons name="pencil" size={14} color={colors.textPlaceholder} style={styles.dueDateEditIcon} />
         </TouchableOpacity>
 
@@ -200,12 +231,25 @@ export function StepDetailScreen({ route, navigation }: any) {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Video</Text>
           {thumbnailUrl && !isPlaying && (
-            <TouchableOpacity style={styles.videoThumbnail} onPress={() => setIsPlaying(true)} activeOpacity={0.85}>
-              <Image source={{ uri: thumbnailUrl }} style={styles.videoImage} />
-              <View style={styles.videoPlayOverlay}>
-                <Ionicons name="play-circle" size={40} color="#ffffff" />
+            // The label sits outside the thumbnail, not inside it: the
+            // thumbnail is a fixed 16:9 box with overflow hidden, and the
+            // image already fills its full height, so a sibling text node in
+            // there gets laid out past the bottom edge and clipped away.
+            <TouchableOpacity
+              onPress={() => setIsPlaying(true)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Play video: ${step.video_title ?? 'watch video'}`}
+            >
+              <View style={styles.videoThumbnail}>
+                <Image source={{ uri: thumbnailUrl }} style={styles.videoImage} />
+                <View style={styles.videoPlayOverlay}>
+                  <Ionicons name="play-circle" size={40} color="#ffffff" />
+                </View>
               </View>
-              <Text style={styles.videoLabel}>{step.video_title ?? 'Watch video'}</Text>
+              <Text style={styles.videoLabel} numberOfLines={2}>
+                {step.video_title ?? 'Watch video'}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -221,6 +265,8 @@ export function StepDetailScreen({ route, navigation }: any) {
                 style={styles.videoCloseButton}
                 onPress={() => setIsPlaying(false)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Close video"
               >
                 <Ionicons name="close-circle" size={26} color="#ffffff" />
               </TouchableOpacity>
@@ -244,6 +290,10 @@ export function StepDetailScreen({ route, navigation }: any) {
               style={styles.resourceCard}
               onPress={() => Linking.openURL(resource.url)}
               activeOpacity={0.7}
+              accessibilityRole="link"
+              accessibilityLabel={`${resource.title}${
+                resource.source ? `, from ${resource.source}` : ''
+              }. Opens in your browser.`}
             >
               <View style={styles.resourceCardHeader}>
                 <Text style={styles.resourceTitle} numberOfLines={2}>
@@ -257,6 +307,40 @@ export function StepDetailScreen({ route, navigation }: any) {
           ))
         )}
       </View>
+
+      {/* Completing a step used to mean backing out to the plan checklist —
+          so the screen you read the step on couldn't record that you'd done
+          it. */}
+      <View style={styles.actions}>
+        <Button
+          label={isComplete ? 'Completed' : 'Mark as complete'}
+          variant={isComplete ? 'secondary' : 'primary'}
+          onPress={() => {
+            if (!requireOnline('check off a step')) return;
+            toggleStep({ stepId, completed: !isComplete });
+          }}
+        />
+        {nextStep && (
+          <TouchableOpacity
+            style={styles.nextStepRow}
+            // replace, not push: walking a plan step by step shouldn't build
+            // a back stack the length of the plan.
+            onPress={() => navigation.replace('StepDetail', { planId, stepId: nextStep.id })}
+            accessibilityRole="button"
+          >
+            <Text style={styles.nextStepText} numberOfLines={1}>
+              Next: {nextStep.title}
+            </Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.accent} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <PlanCompleteOverlay
+        visible={celebratingPlanId !== null}
+        planId={celebratingPlanId}
+        onDismiss={() => setCelebratingPlanId(null)}
+      />
     </ScrollView>
   );
 }
@@ -264,38 +348,38 @@ export function StepDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    content: { padding: 20, paddingBottom: 40 },
-    title: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
-    description: { fontSize: 15, color: colors.textSecondary, marginTop: 10, lineHeight: 21 },
-    offlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-    offlineText: { flex: 1, fontSize: 12, color: colors.textPlaceholder },
-    resourcesLoading: { alignSelf: 'flex-start', marginTop: 4 },
-    section: { marginTop: 24 },
-    sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', marginBottom: 10 },
+    content: { padding: spacing.lg, paddingBottom: spacing.xxxl },
+    title: { fontSize: typography.h2.fontSize, fontWeight: '700', color: colors.textPrimary },
+    description: { fontSize: typography.bodyMedium.fontSize, color: colors.textSecondary, marginTop: 10, lineHeight: typography.bodyMedium.lineHeight },
+    offlineNotice: { marginTop: 10, marginBottom: 0 },
+    resourcesLoading: { alignSelf: 'flex-start', marginTop: spacing.xxs },
+    section: { marginTop: spacing.xl },
+    sectionLabel: { fontSize: typography.caption.fontSize, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', marginBottom: 10 },
     dueDateRow: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 10,
-      paddingHorizontal: 12,
-      borderRadius: 8,
+      paddingHorizontal: spacing.sm,
+      borderRadius: radius.sm,
       borderWidth: 1,
       borderColor: colors.border,
       alignSelf: 'flex-start',
     },
-    dueDateText: { fontSize: 14, color: colors.textSecondary, marginLeft: 8 },
-    dueDateEditIcon: { marginLeft: 8 },
-    datePickerRow: { marginTop: 8 },
+    dueDateText: { fontSize: typography.label.fontSize, color: colors.textSecondary, marginLeft: spacing.xs },
+    dueDateTextOverdue: { color: colors.destructive, fontWeight: '600' },
+    dueDateEditIcon: { marginLeft: spacing.xs },
+    datePickerRow: { marginTop: spacing.xs },
     datePickerDoneButton: {
       alignSelf: 'flex-end',
-      marginTop: 8,
-      paddingVertical: 8,
-      paddingHorizontal: 20,
-      borderRadius: 8,
+      marginTop: spacing.xs,
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.lg,
+      borderRadius: radius.sm,
     },
     videoThumbnail: {
       width: '100%',
       aspectRatio: 16 / 9,
-      borderRadius: 10,
+      borderRadius: radius.md,
       overflow: 'hidden',
       backgroundColor: colors.surfaceMuted,
       borderWidth: 1,
@@ -312,11 +396,17 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.15)',
     },
-    videoLabel: { fontSize: 12, fontWeight: '600', color: colors.textSecondary, paddingVertical: 8, paddingHorizontal: 10 },
+    videoLabel: {
+      fontSize: typography.caption.fontSize,
+      fontWeight: '600',
+      lineHeight: typography.caption.lineHeight,
+      color: colors.textSecondary,
+      marginTop: spacing.xs,
+    },
     videoPlayer: {
       width: '100%',
       aspectRatio: 16 / 9,
-      borderRadius: 10,
+      borderRadius: radius.md,
       overflow: 'hidden',
       backgroundColor: '#000',
     },
@@ -324,19 +414,28 @@ const createStyles = (colors: ThemeColors) =>
       position: 'absolute',
       top: 8,
       right: 8,
-      borderRadius: 13,
+      borderRadius: radius.md,
       backgroundColor: 'rgba(0, 0, 0, 0.45)',
     },
-    noResourcesText: { fontSize: 14, color: colors.textPlaceholder, textAlign: 'center' },
+    noResourcesText: { fontSize: typography.label.fontSize, color: colors.textPlaceholder, textAlign: 'center' },
     resourceCard: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 10,
+      borderRadius: radius.md,
       padding: 14,
       marginBottom: 10,
     },
     resourceCardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-    resourceTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, flex: 1, marginRight: 8 },
-    resourceSource: { fontSize: 12, color: colors.textPlaceholder, marginTop: 4 },
-    resourceDescription: { fontSize: 13, color: colors.textMuted, marginTop: 6, lineHeight: 18 },
+    resourceTitle: { fontSize: typography.bodyMedium.fontSize, fontWeight: '600', color: colors.textPrimary, flex: 1, marginRight: spacing.xs },
+    resourceSource: { fontSize: typography.small.fontSize, color: colors.textPlaceholder, marginTop: spacing.xxs },
+    resourceDescription: { fontSize: typography.caption.fontSize, color: colors.textMuted, marginTop: 6, lineHeight: typography.caption.lineHeight },
+    actions: { marginTop: spacing.xxl },
+    nextStepRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 14,
+    },
+    nextStepText: { flexShrink: 1, fontSize: typography.label.fontSize, fontWeight: '600', color: colors.accent },
   });

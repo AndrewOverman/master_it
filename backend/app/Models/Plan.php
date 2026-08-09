@@ -63,6 +63,15 @@ class Plan extends Model
         return $this->hasOne(PlanRefinement::class)->latestOfMany();
     }
 
+    // hasOne, not hasMany: a plan's steps can be re-completed any number of
+    // times, so the celebration (and its review prompt) can come round again
+    // — but only the most recent review is kept, enforced both here and by a
+    // unique index on plan_feedback.plan_id.
+    public function feedback(): HasOne
+    {
+        return $this->hasOne(PlanFeedback::class);
+    }
+
     /**
      * Returns this plan's share token, minting one (with a fresh 30-day
      * expiry) the first time it's called or whenever the existing one has

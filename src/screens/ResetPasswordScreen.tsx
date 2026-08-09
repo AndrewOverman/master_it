@@ -15,6 +15,7 @@ export function ResetPasswordScreen({ route, navigation }: any) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { token, email } = route.params;
   const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: () => resetPassword({ email, token, password }),
@@ -29,10 +30,14 @@ export function ResetPasswordScreen({ route, navigation }: any) {
   });
 
   const handleSubmit = () => {
-    if (!password.trim()) {
-      Alert.alert('Missing info', 'Please enter a new password.');
-      return;
-    }
+    const problem = !password
+      ? 'Enter a new password.'
+      : password.length < 8
+        ? 'Use at least 8 characters.'
+        : null;
+
+    setPasswordError(problem);
+    if (problem) return;
     mutation.mutate();
   };
 
@@ -49,9 +54,20 @@ export function ResetPasswordScreen({ route, navigation }: any) {
           <TextField
             placeholder="New password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (passwordError) setPasswordError(null);
+            }}
             secureTextEntry
+            // `newPassword` is what prompts the OS to offer a generated one and
+            // then save it — the whole point of arriving here from a reset link.
+            textContentType="newPassword"
+            autoComplete="new-password"
+            returnKeyType="go"
+            onSubmitEditing={handleSubmit}
             editable={!mutation.isPending}
+            error={passwordError}
+            hint="At least 8 characters, with a number and mixed case."
           />
 
           <Button label="Update password" onPress={handleSubmit} loading={mutation.isPending} />

@@ -1,26 +1,25 @@
 import React, { useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, FlatList, StyleSheet } from 'react-native';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { listFeaturedPlans, listPlans } from '../api/plans';
-import { getCurrentUser, type AuthUser } from '../api/auth';
-import { useCopyPlan } from '../hooks/useCopyPlan';
+import { listFeaturedPlans } from '../api/plans';
+import { CreatePlanFab } from '../components/CreatePlanFab';
 import { PlanCard } from '../components/PlanCard';
-import { PlanLimitModal } from '../components/PlanLimitModal';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline } from '../lib/offline';
 import { FEATURED_OFFLINE_SAMPLE_KEY } from '../lib/queryPersistence';
-import { Avatar, Button, EmptyState, Spinner } from '../components/ui';
-import { radius } from '../theme/radius';
+import { EmptyState, OfflineNotice, Spinner } from '../components/ui';
 import { spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
 
 export function FeaturedPlansScreen({ navigation }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isOnline = useIsOnline();
+  // Creating a plan is a Today-tab action — the form and the progress screen
+  // both live in that stack, as will the finished plan.
+  const openNewPlan = () => navigation.navigate('Today', { screen: 'NewPlan' });
+  const newPlanFab = <CreatePlanFab label="Create Plan" onPress={openNewPlan} />;
 
   // Just reads whatever useFeaturedOfflineSampleSync has already put in
   // the cache — enabled: false means this never triggers its own fetch.
@@ -49,38 +48,10 @@ export function FeaturedPlansScreen({ navigation }: any) {
     enabled: isOnline,
   });
 
-  // Zero plans of their own (created or copied) means this is effectively
-  // a first-time landing — drives the hero CTA below instead of dropping
-  // straight into the curated feed. Shares the ['plans'] cache with
-  // PlansListScreen, so it clears the moment NewPlanScreen's create
-  // mutation invalidates it.
-  const { data: myPlans, isLoading: isMyPlansLoading } = useQuery({
-    queryKey: ['plans'],
-    queryFn: listPlans,
-    enabled: isOnline,
-  });
-  const isFirstTime = !isMyPlansLoading && (myPlans?.length ?? 0) === 0;
-
-  // Shares the ['user'] cache with AccountScreen — no extra request if that
-  // screen's already been visited this session. Deliberately not part of
-  // this screen's loading gate below: the greeting is an overlay on the
-  // feed, not content the feed depends on, so it should just pop in once
-  // it resolves rather than holding up everything else.
-  const { data: user } = useQuery({
-    queryKey: ['user'],
-    queryFn: getCurrentUser,
-    enabled: isOnline,
-  });
-
-  const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
-    useCopyPlan(navigation);
-
+  // No copy action here any more — a card opens the preview, and the preview
+  // owns adding (and the limit modal that can come out of it).
   const renderItem = ({ item }: { item: Plan }) => (
-    <PlanCard
-      plan={item}
-      onCopy={() => handleCopyPress(item)}
-      isCopying={copyMutation.isPending && copyMutation.variables === item.id}
-    />
+    <PlanCard plan={item} onPress={() => navigation.navigate('FeaturedPlan', { planId: item.id })} />
   );
 
   // Offline: skip the paginated feed entirely and show the bounded
@@ -89,30 +60,34 @@ export function FeaturedPlansScreen({ navigation }: any) {
   if (!isOnline) {
     return (
       <View style={styles.container}>
-        <View style={styles.offlineBanner}>
-          <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.offlineBannerText}>
-            You're offline — showing {offlineSample.length} saved featured plan
-            {offlineSample.length === 1 ? '' : 's'}.
-          </Text>
-        </View>
+        <OfflineNotice
+          fullWidth
+          message={`Showing ${offlineSample.length} saved featured plan${
+            offlineSample.length === 1 ? '' : 's'
+          }.`}
+        />
         {offlineSample.length === 0 ? (
           <EmptyState message="No featured plans saved for offline browsing yet. Open this screen once while online to save some." />
         ) : (
           <FlatList
             data={offlineSample}
             keyExtractor={(plan) => String(plan.id)}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={styles.listWithFab}
             renderItem={renderItem}
           />
         )}
-        <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
+        {newPlanFab}
       </View>
     );
   }
 
-  if (isLoading || isMyPlansLoading) {
-    return <Spinner fullScreen />;
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <Spinner fullScreen />
+        {newPlanFab}
+      </View>
+    );
   }
 
   const plans = data?.pages.flatMap((page) => page.data) ?? [];
@@ -122,7 +97,7 @@ export function FeaturedPlansScreen({ navigation }: any) {
       <FlatList
         data={plans}
         keyExtractor={(plan) => String(plan.id)}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.listWithFab}
         renderItem={renderItem}
         refreshing={isRefetching}
         onRefresh={refetch}
@@ -132,18 +107,6 @@ export function FeaturedPlansScreen({ navigation }: any) {
             fetchNextPage();
           }
         }}
-        ListHeaderComponent={
-          <>
-            <GreetingHeader user={user} colors={colors} styles={styles} />
-            {isFirstTime ? (
-              <FirstPlanHero
-                colors={colors}
-                styles={styles}
-                onCreate={() => navigation.navigate('NewPlan')}
-              />
-            ) : null}
-          </>
-        }
         ListEmptyComponent={<EmptyState message="No featured plans yet. Check back soon!" fullScreen={false} />}
         ListFooterComponent={
           isFetchingNextPage ? (
@@ -153,120 +116,16 @@ export function FeaturedPlansScreen({ navigation }: any) {
           ) : null
         }
       />
-      <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
+      {newPlanFab}
     </>
-  );
-}
-
-// Renders nothing until the user query resolves, rather than a skeleton —
-// this is a personalization touch layered on top of the feed, not content
-// the screen depends on to be useful.
-function GreetingHeader({
-  user,
-  colors,
-  styles,
-}: {
-  user: AuthUser | undefined;
-  colors: ThemeColors;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  if (!user) return null;
-
-  const firstName = user.name.trim().split(/\s+/)[0];
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-
-  return (
-    <View style={styles.greetingRow}>
-      <Avatar name={user.name} size={40} />
-      <Text style={styles.greetingText}>
-        {greeting}, {firstName}
-      </Text>
-    </View>
-  );
-}
-
-// First-run landing: leads straight into the core "describe a goal, get a
-// plan" action instead of the curated feed, per the Duolingo/Headspace
-// pattern of getting to the first real action fast rather than a tutorial
-// screen. The feed is still one scroll away, just no longer first.
-function FirstPlanHero({
-  colors,
-  styles,
-  onCreate,
-}: {
-  colors: ThemeColors;
-  styles: ReturnType<typeof createStyles>;
-  onCreate: () => void;
-}) {
-  return (
-    <View style={styles.hero}>
-      <View style={styles.heroIcon}>
-        <Ionicons name="sparkles" size={26} color={colors.accent} />
-      </View>
-      <Text style={styles.heroTitle}>Let's build your first plan</Text>
-      <Text style={styles.heroSubtitle}>
-        Describe any skill or goal — we'll turn it into a step-by-step plan built just for you.
-      </Text>
-      <Button label="Build my first plan" onPress={onCreate} style={styles.heroButton} />
-      <Text style={styles.heroDivider}>Or get inspired by what others are building</Text>
-    </View>
   );
 }
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
-    footerSpinner: { marginVertical: 20 },
-    offlineBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      backgroundColor: colors.surfaceMuted,
-    },
-    offlineBannerText: { flex: 1, fontSize: 12.5, color: colors.textMuted },
-    greetingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      marginBottom: spacing.lg,
-    },
-    greetingText: { fontSize: typography.h3.fontSize, fontWeight: '700', color: colors.textPrimary },
-    hero: {
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
-      borderRadius: radius.lg,
-      padding: spacing.xl,
-      alignItems: 'center',
-      marginBottom: spacing.xl,
-    },
-    heroIcon: {
-      width: 52,
-      height: 52,
-      borderRadius: radius.pill,
-      backgroundColor: colors.accentMuted,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: spacing.md,
-    },
-    heroTitle: { fontSize: typography.h2.fontSize, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-    heroSubtitle: {
-      fontSize: 15,
-      lineHeight: 21,
-      color: colors.textMuted,
-      textAlign: 'center',
-      marginTop: spacing.xs,
-      marginBottom: spacing.lg,
-    },
-    heroButton: { alignSelf: 'stretch' },
-    heroDivider: {
-      fontSize: typography.caption.fontSize,
-      fontWeight: '500',
-      color: colors.textPlaceholder,
-      marginTop: spacing.lg,
-    },
+    // paddingBottom clears the floating FAB. No safe-area inset added — the
+    // tab bar already accounts for it, and doubling up left dead space.
+    listWithFab: { padding: spacing.lg, paddingBottom: 96, flexGrow: 1, backgroundColor: colors.background },
+    footerSpinner: { marginVertical: spacing.lg },
   });

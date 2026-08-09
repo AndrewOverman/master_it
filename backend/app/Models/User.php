@@ -85,6 +85,39 @@ class User extends Authenticatable
         return $this->subscription_tier === 'free' && $this->free_generation_claimed_at === null;
     }
 
+    /**
+     * How many plan generations are left right now.
+     *
+     * Kept beside canGenerate() rather than recomputed on the client so the
+     * two can't drift — this has to account for the rolling-window reset and
+     * the free tier's one-time lifetime generation, neither of which is
+     * derivable from plans_generated_count alone.
+     */
+    public function generationsRemaining(): int
+    {
+        $this->resetGenerationPeriodIfElapsed();
+
+        $remaining = max(0, $this->monthlyGenerationLimit() - $this->plans_generated_count);
+
+        if ($remaining === 0 && $this->subscription_tier === 'free' && $this->free_generation_claimed_at === null) {
+            return 1;
+        }
+
+        return $remaining;
+    }
+
+    /**
+     * Why the user can't generate right now, in their own terms. Lives here
+     * rather than in PlanController so the 429 body and the up-front notice
+     * on the new-plan form are guaranteed to say the same thing.
+     */
+    public function generationLimitMessage(): string
+    {
+        return $this->hasActiveSubscription()
+            ? "You've reached your monthly limit of {$this->monthlyGenerationLimit()} generated plans."
+            : "You've used your free plan generation. Subscribe to generate more.";
+    }
+
     public function recordGeneration(): void
     {
         $this->resetGenerationPeriodIfElapsed();

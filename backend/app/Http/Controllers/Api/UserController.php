@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -13,7 +14,7 @@ class UserController extends Controller
 {
     public function show(Request $request)
     {
-        return $request->user();
+        return new UserResource($request->user());
     }
 
     public function update(Request $request)
@@ -36,7 +37,10 @@ class UserController extends Controller
 
         $user->update($validated);
 
-        return $user;
+        // Same shape as show() — AccountScreen writes this response straight
+        // into the shared ['user'] cache, so returning the bare model here
+        // would silently drop the generation fields other screens read.
+        return new UserResource($user);
     }
 
     public function export(Request $request)

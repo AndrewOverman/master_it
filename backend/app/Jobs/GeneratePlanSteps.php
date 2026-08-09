@@ -32,6 +32,33 @@ class GeneratePlanSteps implements ShouldQueue
     // demonstration, not a default for every step.
     private const MAX_VIDEOS_PER_PLAN = 2;
 
+    private const DEFAULT_TARGET_DAYS = 30;
+
+    // How long a single step should ideally represent. A step is a chunk the
+    // user can hold in their head and finish before losing the thread, so its
+    // length tracks how much time they've actually got per day. The step count
+    // then falls out of the plan length rather than being a fixed range —
+    // otherwise a two-week plan and a six-month plan come back the same shape.
+    private const IDEAL_STEP_DAYS = [
+        'intensive' => 2.5,
+        'moderate' => 4.5,
+        'light' => 7.0,
+    ];
+
+    private const DEFAULT_IDEAL_STEP_DAYS = 4.5;
+
+    // At the same time commitment a beginner needs smaller, more numerous
+    // steps than an advanced person — the system prompt says so, but nothing
+    // enforced it before this.
+    private const BEGINNER_STEP_DAYS_FACTOR = 0.75;
+
+    // Below MIN_STEPS a plan doesn't read as a plan; above MAX_STEPS it reads
+    // as a backlog and completion drops off. Longer plans get longer steps,
+    // not more of them.
+    private const MIN_STEPS = 4;
+
+    private const MAX_STEPS = 8;
+
     // Maps a refinement tag to the instruction sentence sent to Claude.
     // PlanController validates incoming tags against availableTags() below,
     // so this is the one place the set of valid tags is defined.
@@ -65,6 +92,9 @@ class GeneratePlanSteps implements ShouldQueue
           than an advanced person with several hours a day.
         - REALISTIC on time: estimated_days per step should reflect genuine
           effort at the stated time commitment, not an arbitrary round number.
+          Steps genuinely differ in size, so the estimates should differ too —
+          a plan where every step carries the same number of days reads as a
+          template rather than a considered breakdown of this specific goal.
         - Named for the activity, not the phase. Never use generic phase labels
           like "Learn the fundamentals," "Practice the basics," or "Put it to
           the test" — always describe the actual, concrete activity implied by
@@ -138,9 +168,12 @@ class GeneratePlanSteps implements ShouldQueue
         - Apply every requested change concretely. If a change conflicts with
           an existing step, change or replace that step; don't just append a
           caveat to it.
-        - The revised plan should still be 4-7 sequential steps following all
-          the same guidance above (specific, actionable, sequential, scoped,
-          realistic, named for the activity).
+        - The revised plan should still have exactly the number of steps
+          stated in the user message, following all the same guidance above
+          (specific, actionable, sequential, scoped, realistic, named for the
+          activity). That count is fixed by the plan's length and time
+          commitment, so honour it even if the requested changes tempt you to
+          add or drop a step — fold a change into the existing steps instead.
         - The same content policy below still applies — call
           flag_unsupported_goal instead if the requested changes themselves
           push the goal into an unsupported category, exactly as you would
@@ -153,7 +186,10 @@ class GeneratePlanSteps implements ShouldQueue
           (e.g. a guitar for learning guitar, a wrench for fixing a faucet, a
           running shoe for training for a race). Pick something concrete and
           recognizable, not a generic "sparkles" or "checklist" emoji.
-        - steps: 4-7 sequential steps. Each step needs:
+        - steps: sequential steps, exactly as many as the "Number of steps"
+          line in the user message asks for — that count is derived from the
+          plan's length and the person's time commitment, so treat it as a
+          requirement rather than a suggestion. Each step needs:
           - title: a short, specific action (not a topic or phase name)
           - description: 1-2 sentences explaining exactly what to do, specific
             to the actual goal
@@ -207,6 +243,31 @@ class GeneratePlanSteps implements ShouldQueue
     public static function availableTags(): array
     {
         return array_keys(self::TAG_INSTRUCTIONS);
+    }
+
+    /**
+     * How many steps this plan should come back with. Decided here rather
+     * than left to Claude: the model is good at what goes in a step and has
+     * no idea what length still reads as an achievable plan on a phone.
+     *
+     * Capped by the plan length itself as well as MAX_STEPS, since every step
+     * costs at least a day — a 3-day plan can't honestly carry 4 of them.
+     */
+    private function stepBudget(): int
+    {
+        $totalDays = $this->plan->target_days ?? self::DEFAULT_TARGET_DAYS;
+
+        $idealStepDays = self::IDEAL_STEP_DAYS[$this->plan->time_commitment ?? '']
+            ?? self::DEFAULT_IDEAL_STEP_DAYS;
+
+        if ($this->plan->skill_level === 'beginner') {
+            $idealStepDays *= self::BEGINNER_STEP_DAYS_FACTOR;
+        }
+
+        $ceiling = (int) min(self::MAX_STEPS, max(1, $totalDays));
+        $floor = (int) min(self::MIN_STEPS, $ceiling);
+
+        return (int) max($floor, min($ceiling, round($totalDays / $idealStepDays)));
     }
 
     public function handle(): void
@@ -369,8 +430,16 @@ class GeneratePlanSteps implements ShouldQueue
                             ],
                             'steps' => [
                                 'type' => 'array',
-                                'minItems' => 3,
-                                'maxItems' => 8,
+                                // Deliberately loose, and deliberately not
+                                // derived from stepBudget(): the tools block is
+                                // part of the cached prefix, so varying it per
+                                // plan would blow the cache on every call. The
+                                // real control is the exact count in the user
+                                // message; this is only a backstop against a
+                                // wildly malformed response. The floor is 1
+                                // because a 2-day plan legitimately has 2 steps.
+                                'minItems' => 1,
+                                'maxItems' => self::MAX_STEPS,
                                 'items' => [
                                     'type' => 'object',
                                     'properties' => [
@@ -456,20 +525,34 @@ class GeneratePlanSteps implements ShouldQueue
             throw new RuntimeException('Anthropic response did not include any usable steps.');
         }
 
+        // Individual steps can independently come back as JSON-encoded
+        // strings rather than objects, even when the outer array didn't.
+        $steps = collect($steps)
+            ->map(fn ($step) => is_string($step) ? json_decode($step, true) : $step)
+            ->filter(fn ($step) => is_array($step))
+            ->values()
+            ->all();
+
+        if (empty($steps)) {
+            throw new RuntimeException('Anthropic response did not include any usable steps.');
+        }
+
         return ['type' => 'steps', 'emoji' => is_string($emoji) ? $emoji : null, 'steps' => $steps];
     }
 
     private function buildPrompt(): string
     {
-        $totalDays = $this->plan->target_days ?? 30;
+        $totalDays = $this->plan->target_days ?? self::DEFAULT_TARGET_DAYS;
         $skillLevel = $this->plan->skill_level ?? 'unspecified';
         $timeCommitment = $this->plan->time_commitment ?? 'unspecified';
+        $stepCount = $this->stepBudget();
 
         $prompt = <<<PROMPT
             Goal: "{$this->plan->original_prompt}"
             Skill level: {$skillLevel}
             Time commitment: {$timeCommitment}
             Target plan length: approximately {$totalDays} days total
+            Number of steps: exactly {$stepCount}
             PROMPT;
 
         if (! $this->isRefinement) {

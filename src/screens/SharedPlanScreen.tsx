@@ -8,6 +8,8 @@ import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useRequireOnline } from '../lib/offline';
 import { Button, EmptyState, Spinner } from '../components/ui';
+import { typography } from '../theme/typography';
+import { spacing } from '../theme/spacing';
 
 // Read-only preview of a plan someone else shared a link to — reachable
 // only via a masterit://plans/shared/{token} deep link, never from normal
@@ -31,9 +33,9 @@ export function SharedPlanScreen({ route, navigation }: any) {
     mutationFn: () => copySharedPlan(token),
     onSuccess: (newPlan) => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      // Replace, not push — the preview shouldn't stay in the back stack
-      // once the user owns a real copy of it.
-      navigation.replace('PlanDetail', { planId: newPlan.id });
+      // Crosses into the Plans tab: this preview lives under Explore, but
+      // the copy the user now owns belongs with their own plans.
+      navigation.navigate('Today', { screen: 'PlanDetail', params: { planId: newPlan.id } });
     },
     onError: (error: any) => {
       if (error?.response?.status === 429) {
@@ -59,6 +61,11 @@ export function SharedPlanScreen({ route, navigation }: any) {
         icon="link-outline"
         title="This link isn't available"
         message="The plan may have been unshared, or the link is no longer valid."
+        // A dead share link is often the app's first screen (it's reachable
+        // only by deep link), so there may be no history to go back to —
+        // point at the feed rather than at a back button that isn't there.
+        actionLabel="Browse featured plans"
+        onAction={() => navigation.navigate('Featured')}
       />
     );
   }
@@ -105,11 +112,11 @@ export function SharedPlanScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
-    emoji: { fontSize: 32, marginBottom: 4 },
-    planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
-    stepCount: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
-    list: { padding: 20, paddingBottom: 8 },
+    header: { padding: spacing.lg, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
+    emoji: { fontSize: 32, marginBottom: spacing.xxs },
+    planTitle: { fontSize: typography.h2.fontSize, fontWeight: '700', color: colors.textPrimary },
+    stepCount: { fontSize: typography.caption.fontSize, color: colors.textMuted, marginTop: spacing.xxs },
+    list: { padding: spacing.lg, paddingBottom: spacing.xs },
     stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 },
     stepBullet: {
       width: 8,
@@ -120,10 +127,10 @@ const createStyles = (colors: ThemeColors) =>
       marginRight: 14,
     },
     stepText: { flex: 1 },
-    stepTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
-    stepDescription: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
+    stepTitle: { fontSize: typography.body.fontSize, fontWeight: '600', color: colors.textPrimary },
+    stepDescription: { fontSize: typography.label.fontSize, color: colors.textMuted, marginTop: spacing.xxs },
     footer: {
-      padding: 20,
+      padding: spacing.lg,
       borderTopWidth: 1,
       borderTopColor: colors.borderMuted,
       backgroundColor: colors.background,

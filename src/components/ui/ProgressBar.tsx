@@ -7,12 +7,25 @@ interface ProgressBarProps {
   ratio: number;
   animateOnMount?: boolean;
   style?: ViewStyle;
+  /**
+   * What this bar is measuring, e.g. "Plan progress". Also becomes the spoken
+   * value ("3 of 6 steps complete") when `valueText` is given — a bare "50
+   * percent" doesn't say fifty percent of what.
+   */
+  label?: string;
+  valueText?: string;
 }
 
 // animateOnMount defaults false so rows in a list start at their true width
 // instead of sweeping in from 0 on every mount/scroll-into-view — it still
 // animates smoothly on real ratio changes either way.
-export function ProgressBar({ ratio, animateOnMount = false, style }: ProgressBarProps) {
+export function ProgressBar({
+  ratio,
+  animateOnMount = false,
+  style,
+  label,
+  valueText,
+}: ProgressBarProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const clamped = Math.max(0, Math.min(1, ratio));
@@ -32,7 +45,13 @@ export function ProgressBar({ ratio, animateOnMount = false, style }: ProgressBa
     <View
       style={[styles.track, style]}
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}
+      accessibilityLabel={label}
+      accessibilityValue={{
+        min: 0,
+        max: 100,
+        now: Math.round(clamped * 100),
+        ...(valueText ? { text: valueText } : {}),
+      }}
     >
       <Animated.View
         style={[

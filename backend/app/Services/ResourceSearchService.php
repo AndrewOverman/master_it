@@ -77,7 +77,16 @@ class ResourceSearchService
             'x-api-key' => config('services.anthropic.api_key'),
             'anthropic-version' => '2023-06-01',
         ])
-            ->timeout(60)
+            // Unlike GeneratePlanSteps' identical-looking call, this one runs
+            // synchronously inside PlanStepController's GET request rather
+            // than a queued job, so its worst case adds directly to page-load
+            // latency — kept tighter than the 60s-timeout/2-attempt budget
+            // used there (worst case here: 30 + 1 + 30 = 61s, vs. 121s).
+            // retry()'s first argument is the total attempt count, not a
+            // number of retries on top of the first attempt — retry(2, ...)
+            // is one retry. The client timeout for this endpoint is matched
+            // to this 61s worst case in getStep().
+            ->timeout(30)
             ->retry(2, 1000)
             ->post('https://api.anthropic.com/v1/messages', [
                 'model' => config('services.anthropic.model'),

@@ -1,40 +1,61 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listPlans, setPlanComplete, resetPlanProgress } from '../api/plans';
-import type { Plan } from '../types/plan';
+import type { Plan, PlanStatus } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
-import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
-import { EmptyState, ProgressBar, Spinner } from '../components/ui';
-import { shadows } from '../theme/shadows';
+import { CreatePlanFab } from '../components/CreatePlanFab';
+import { ActionSheet, EmptyState, OfflineNotice, ProgressBar, Spinner, type SheetAction } from '../components/ui';
+import { typography } from '../theme/typography';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
-export function PlansListScreen({ navigation, route }: any) {
+// A plan that isn't 'ready' has no progress to report, so the meta line
+// carries its state instead. Written out rather than printing the raw enum
+// ("generating", "failed") — and each one names what the user can do next,
+// since every non-ready row is tappable through to a screen that acts on it.
+const STATUS_LABELS: Record<Exclude<PlanStatus, 'ready'>, string> = {
+  generating: 'Building your plan…',
+  failed: "Couldn't be built — tap to try again",
+  rejected: "We couldn't build this one",
+};
+
+// A plan carries two independent notions of "done", and the list used to
+// render both with the same green check:
+//   - every step checked off  — the work actually got finished
+//   - completed_at set        — the user declared the plan finished, which
+//                               they can do at any point, steps or no steps
+// They usually agree. When they don't, the row has to say so, otherwise
+// "6/6 steps complete" sitting under a menu offering "Mark as complete"
+// reads as a contradiction.
+function completionMeta(plan: Plan): string {
+  const done = plan.steps.filter((step) => step.completed_at).length;
+  const total = plan.steps.length;
+  const allStepsDone = total > 0 && done === total;
+  const markedDone = Boolean(plan.completed_at);
+
+  if (markedDone) return `Marked done · ${done} of ${total} steps complete`;
+  if (allStepsDone) return `All ${total} steps complete`;
+  return `${done} of ${total} steps complete`;
+}
+
+export function PlansListScreen({ navigation }: any) {
   const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isOnline = useIsOnline();
   const requireOnline = useRequireOnline();
-  const insets = useSafeAreaInsets();
   // Keyed by plan id so the swiped-open row can be closed by the button
   // press that triggers its own action, without closing every other row.
   const swipeableRefs = useRef<Map<number, Swipeable>>(new Map());
-  const [showCelebration, setShowCelebration] = useState(false);
-
-  // PlanDetailScreen navigates here with `celebrate: true` when the last
-  // step of a plan is checked off. Clear the param right away so it doesn't
-  // re-fire on a later focus (e.g. coming back via the drawer).
-  useEffect(() => {
-    if (route.params?.celebrate) {
-      setShowCelebration(true);
-      navigation.setParams({ celebrate: undefined });
-    }
-  }, [route.params?.celebrate, navigation]);
+  // Which row's action sheet is open. The sheet renders once at screen level
+  // rather than per row, so it can't be torn down by its own row re-rendering.
+  const [menuPlan, setMenuPlan] = useState<Plan | null>(null);
 
   const {
     data: plans,
@@ -87,18 +108,60 @@ export function PlansListScreen({ navigation, route }: any) {
       );
       queryClient.setQueryData(['plan', updatedPlan.id], updatedPlan);
     },
+    // Unlike the other mutations here there's no optimistic update to roll
+    // back, so a failure would otherwise be indistinguishable from nothing
+    // happening — the row just keeps showing the old progress. Reset is a
+    // bulk "clear every step at once" shortcut (individual steps can always
+    // be unchecked on the plan itself), and a silent no-op reads as broken.
+    onError: (error: any) => {
+      Alert.alert(
+        "Couldn't reset this plan",
+        error?.response?.data?.message ?? 'Please check your connection and try again.'
+      );
+    },
   });
 
-  const newPlanFab = (
-    <TouchableOpacity
-      style={[styles.fab, { bottom: insets.bottom + 20 }]}
-      onPress={() => navigation.navigate('NewPlan')}
-      accessibilityLabel="Create plan"
-    >
-      <Ionicons name="add" size={22} color={colors.background} />
-      <Text style={styles.fabLabel}>Create Plan</Text>
-    </TouchableOpacity>
-  );
+  const confirmReset = (plan: Plan) => {
+    if (!requireOnline("reset a plan's progress")) return;
+    Alert.alert(
+      'Reset progress?',
+      `This will mark all of "${plan.title}"'s steps as incomplete. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: () => resetMutation.mutate(plan.id) },
+      ]
+    );
+  };
+
+  const menuActions: SheetAction[] = menuPlan
+    ? [
+        {
+          // "Reopen" / "Mark plan as done", not "complete" — this toggles the
+          // user's declaration, never the steps, and the wording shouldn't
+          // imply otherwise on a plan that already shows every step checked.
+          label: menuPlan.completed_at ? 'Reopen plan' : 'Mark plan as done',
+          icon: menuPlan.completed_at ? 'arrow-undo' : 'flag-outline',
+          onPress: () => {
+            const plan = menuPlan;
+            setMenuPlan(null);
+            if (!requireOnline('mark a plan complete')) return;
+            completeMutation.mutate({ planId: plan.id, completed: !plan.completed_at });
+          },
+        },
+        {
+          label: 'Reset progress',
+          icon: 'refresh',
+          destructive: true,
+          onPress: () => {
+            const plan = menuPlan;
+            setMenuPlan(null);
+            confirmReset(plan);
+          },
+        },
+      ]
+    : [];
+
+  const newPlanFab = <CreatePlanFab label="Create Plan" onPress={() => navigation.navigate('NewPlan')} />;
 
   if (isLoading) {
     if (!isOnline) {
@@ -123,7 +186,13 @@ export function PlansListScreen({ navigation, route }: any) {
   if (!plans || plans.length === 0) {
     return (
       <View style={styles.container}>
-        <EmptyState message="You haven't created any plans yet." />
+        <EmptyState
+          icon="albums-outline"
+          title="No plans yet"
+          message="Tell us what you want to learn and we'll build you a step-by-step plan."
+          actionLabel="Create a plan"
+          onAction={() => navigation.navigate('NewPlan')}
+        />
         {newPlanFab}
       </View>
     );
@@ -135,43 +204,47 @@ export function PlansListScreen({ navigation, route }: any) {
     const isCompleted = Boolean(item.completed_at);
     const allStepsComplete =
       item.status === 'ready' && item.steps.length > 0 && item.steps.every((s) => s.completed_at);
-    const showComplete = isCompleted || allStepsComplete;
 
     const closeSwipeable = () => swipeableRefs.current.get(item.id)?.close();
 
-    const handleReset = () => {
-      closeSwipeable();
-      if (!requireOnline("reset a plan's progress")) return;
-      Alert.alert(
-        'Reset progress?',
-        `This will mark all of "${item.title}"'s steps as incomplete. This can't be undone.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Reset',
-            style: 'destructive',
-            onPress: () => resetMutation.mutate(item.id),
-          },
-        ]
-      );
+    const handleToggleComplete = () => {
+      if (!requireOnline('mark a plan complete')) return;
+      completeMutation.mutate({ planId: item.id, completed: !isCompleted });
     };
 
+    const handleReset = () => {
+      closeSwipeable();
+      confirmReset(item);
+    };
+
+    // Complete first, Reset second. Children render left-to-right, so the
+    // first one sits nearest the row and is what a short swipe uncovers —
+    // which previously meant the destructive Reset was the easiest to hit by
+    // accident. Reset now needs a deliberate full swipe (and still confirms).
     const renderRightActions = () => (
       <View style={{ flexDirection: 'row' }}>
-        <TouchableOpacity style={[styles.swipeAction, styles.swipeActionReset]} onPress={handleReset}>
-          <Ionicons name="refresh" size={22} color={colors.background} />
-          <Text style={styles.swipeActionText}>Reset</Text>
-        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.swipeAction, isCompleted ? styles.swipeActionUndo : styles.swipeActionComplete]}
           onPress={() => {
             closeSwipeable();
-            if (!requireOnline('mark a plan complete')) return;
-            completeMutation.mutate({ planId: item.id, completed: !isCompleted });
+            handleToggleComplete();
           }}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isCompleted ? `Reopen ${item.title}` : `Mark ${item.title} done`
+          }
         >
-          <Ionicons name={isCompleted ? 'arrow-undo' : 'checkmark'} size={22} color={colors.background} />
-          <Text style={styles.swipeActionText}>{isCompleted ? 'Undo' : 'Complete'}</Text>
+          <Ionicons name={isCompleted ? 'arrow-undo' : 'flag'} size={22} color={colors.background} />
+          <Text style={styles.swipeActionText}>{isCompleted ? 'Reopen' : 'Mark done'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.swipeAction, styles.swipeActionReset]}
+          onPress={handleReset}
+          accessibilityRole="button"
+          accessibilityLabel={`Reset progress on ${item.title}`}
+        >
+          <Ionicons name="refresh" size={22} color={colors.background} />
+          <Text style={styles.swipeActionText}>Reset</Text>
         </TouchableOpacity>
       </View>
     );
@@ -187,7 +260,29 @@ export function PlansListScreen({ navigation, route }: any) {
       >
         <TouchableOpacity
           style={styles.planRow}
-          onPress={() => navigation.navigate('PlanDetail', { planId: item.id })}
+          accessibilityRole="button"
+          // The row's own announcement, so focusing it says what the plan is
+          // and where it stands instead of nothing. Descendants stay
+          // individually focusable on purpose — marking the row `accessible`
+          // would collapse them and take the "More actions" button with them.
+          accessibilityLabel={`${item.title}. ${
+            item.status === 'ready' ? completionMeta(item) : STATUS_LABELS[item.status]
+          }`}
+          // Only a 'ready' plan has a checklist to show. Every other status
+          // would land on PlanDetail's empty step list with no explanation,
+          // so each routes to the screen that can actually act on it — the
+          // progress screen, or the retry/rejected screens.
+          onPress={() => {
+            if (item.status === 'generating') {
+              navigation.navigate('Generating', { planId: item.id });
+            } else if (item.status === 'failed') {
+              navigation.navigate('PlanFailed', { planId: item.id, message: item.error_message });
+            } else if (item.status === 'rejected') {
+              navigation.navigate('PlanRejected', { planId: item.id });
+            } else {
+              navigation.navigate('PlanDetail', { planId: item.id });
+            }
+          }}
         >
           <View style={styles.planImage}>
             {item.emoji ? (
@@ -198,10 +293,13 @@ export function PlansListScreen({ navigation, route }: any) {
           </View>
           <View style={styles.planText}>
             <Text style={[styles.planTitle, isCompleted && styles.planTitleDone]}>{item.title}</Text>
-            <Text style={styles.planMeta}>
-              {item.status === 'ready'
-                ? `${item.steps.filter((s) => s.completed_at).length}/${item.steps.length} steps complete`
-                : item.status}
+            <Text
+              style={[
+                styles.planMeta,
+                (item.status === 'failed' || item.status === 'rejected') && styles.planMetaProblem,
+              ]}
+            >
+              {item.status === 'ready' ? completionMeta(item) : STATUS_LABELS[item.status]}
             </Text>
             {item.status === 'ready' && item.steps.length > 0 && (
               <ProgressBar
@@ -210,9 +308,23 @@ export function PlansListScreen({ navigation, route }: any) {
               />
             )}
           </View>
-          {showComplete && (
+          {/* Green check is earned — every step is actually done. The flag
+              means the user closed the plan out early, which is a different
+              claim and shouldn't wear the same badge. */}
+          {allStepsComplete ? (
             <Ionicons name="checkmark-circle" size={24} color={colors.success} style={styles.completeIcon} />
-          )}
+          ) : isCompleted ? (
+            <Ionicons name="flag" size={20} color={colors.textMuted} style={styles.completeIcon} />
+          ) : null}
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => setMenuPlan(item)}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={`More actions for ${item.title}`}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
         </TouchableOpacity>
       </Swipeable>
     );
@@ -223,23 +335,23 @@ export function PlansListScreen({ navigation, route }: any) {
       <FlatList
         data={plans}
         keyExtractor={(plan) => String(plan.id)}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 96 }]}
+        contentContainerStyle={styles.listWithFab}
         renderItem={renderItem}
         refreshing={isRefetching}
         onRefresh={refetch}
         ListHeaderComponent={
           !isOnline ? (
-            <View style={styles.offlineBanner}>
-              <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.offlineBannerText}>
-                You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
-              </Text>
-            </View>
+            <OfflineNotice syncedLabel={syncedLabel} />
           ) : null
         }
       />
       {newPlanFab}
-      <PlanCompleteOverlay visible={showCelebration} onDismiss={() => setShowCelebration(false)} />
+      <ActionSheet
+        visible={menuPlan !== null}
+        title={menuPlan?.title}
+        actions={menuActions}
+        onDismiss={() => setMenuPlan(null)}
+      />
     </View>
   );
 }
@@ -247,43 +359,20 @@ export function PlansListScreen({ navigation, route }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    fab: {
-      position: 'absolute',
-      alignSelf: 'center',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      height: 52,
-      paddingHorizontal: 22,
-      borderRadius: 26,
-      backgroundColor: colors.accent,
-      ...shadows.fab,
-    },
-    fabLabel: { color: colors.background, fontSize: 15, fontWeight: '600' },
-    list: { padding: 20, flexGrow: 1, backgroundColor: colors.background },
-    offlineBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-      backgroundColor: colors.surfaceMuted,
-      marginBottom: 16,
-    },
-    offlineBannerText: { flex: 1, fontSize: 12.5, color: colors.textMuted },
+    // paddingBottom clears the floating FAB. No safe-area inset added — the
+    // tab bar already accounts for it, and doubling up left dead space.
+    listWithFab: { padding: spacing.lg, paddingBottom: 96, flexGrow: 1, backgroundColor: colors.background },
     planRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 16,
+      paddingVertical: spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: colors.borderMuted,
     },
     planImage: {
       width: 48,
       height: 48,
-      borderRadius: 12,
+      borderRadius: radius.md,
       backgroundColor: colors.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
@@ -291,11 +380,13 @@ const createStyles = (colors: ThemeColors) =>
     },
     planEmoji: { fontSize: 24 },
     planText: { flex: 1 },
-    planTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    planTitle: { fontSize: typography.body.fontSize, fontWeight: '600', color: colors.textPrimary },
     planTitleDone: { textDecorationLine: 'line-through', color: colors.textPlaceholder },
     completeIcon: { marginLeft: 10 },
-    planMeta: { fontSize: 13, color: colors.textMuted, marginTop: 4, textTransform: 'capitalize' },
-    rowProgressTrack: { marginTop: 8 },
+    menuButton: { paddingLeft: spacing.sm, paddingVertical: spacing.xxs },
+    planMeta: { fontSize: typography.caption.fontSize, color: colors.textMuted, marginTop: spacing.xxs },
+    planMetaProblem: { color: colors.destructive },
+    rowProgressTrack: { marginTop: spacing.xs },
     swipeAction: {
       width: 96,
       alignItems: 'center',
@@ -304,5 +395,5 @@ const createStyles = (colors: ThemeColors) =>
     swipeActionComplete: { backgroundColor: colors.success },
     swipeActionUndo: { backgroundColor: colors.textMuted },
     swipeActionReset: { backgroundColor: colors.destructive },
-    swipeActionText: { color: colors.background, fontSize: 12, fontWeight: '600', marginTop: 4 },
+    swipeActionText: { color: colors.background, fontSize: typography.small.fontSize, fontWeight: '600', marginTop: spacing.xxs },
   });

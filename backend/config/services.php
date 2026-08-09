@@ -52,6 +52,12 @@ return [
         // Set the same value in the RevenueCat dashboard under
         // Project settings > Integrations > Webhooks > Authorization header.
         'webhook_secret' => env('REVENUECAT_WEBHOOK_SECRET'),
+
+        // The SECRET API key (Project settings > API keys), not one of the
+        // public SDK keys the app ships with. Used by RevenueCatService to
+        // verify entitlements server-side, so a client can never talk its
+        // way into a paid tier. Must never be exposed to the app.
+        'secret_api_key' => env('REVENUECAT_SECRET_API_KEY'),
     ],
 
     'mobile' => [

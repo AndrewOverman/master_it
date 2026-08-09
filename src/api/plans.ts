@@ -1,11 +1,13 @@
 import { apiClient } from './client';
 import type {
   Plan,
+  PlanStatus,
   PlanStep,
   CreatePlanRequest,
   CreatePlanResponse,
   RefinePlanRequest,
   RefinePlanResponse,
+  SubmitPlanFeedbackRequest,
   PaginatedResponse,
 } from '../types/plan';
 
@@ -23,12 +25,23 @@ export async function getPlan(id: number): Promise<Plan> {
   return data;
 }
 
+// On first view of a step, the backend searches for resources inline
+// (ResourceSearchService) before responding — worst case 61s server-side
+// (see ResourceSearchService::search()). The client's default 15s timeout
+// is well short of that, so left alone this call would time out on the
+// client while the backend was still working, and React Query's automatic
+// retry would then re-trigger another full search on top of the one still
+// running server-side. Overridden here to comfortably clear that worst case.
+const STEP_RESOURCE_SEARCH_TIMEOUT_MS = 75_000;
+
 // GET /api/v1/plans/{planId}/steps/{stepId}
 // Loads a single step with its resources. Resources are searched for
 // lazily on the backend the first time a step is fetched this way, so
 // this call may take longer than a typical GET on first view.
 export async function getStep(planId: number, stepId: number): Promise<PlanStep> {
-  const { data } = await apiClient.get<PlanStep>(`/api/v1/plans/${planId}/steps/${stepId}`);
+  const { data } = await apiClient.get<PlanStep>(`/api/v1/plans/${planId}/steps/${stepId}`, {
+    timeout: STEP_RESOURCE_SEARCH_TIMEOUT_MS,
+  });
   return data;
 }
 
@@ -76,12 +89,33 @@ export async function resetPlanProgress(planId: number): Promise<Plan> {
   return data;
 }
 
+// POST /api/v1/plans/{planId}/retry
+// Re-runs generation for a plan whose job failed, reusing the inputs already
+// stored on it — so a failure costs the user neither their typing nor a
+// second generation from their allowance. 409s for any status but 'failed'.
+export async function retryPlan(planId: number): Promise<{ id: number; status: PlanStatus }> {
+  const { data } = await apiClient.post<{ id: number; status: PlanStatus }>(
+    `/api/v1/plans/${planId}/retry`
+  );
+  return data;
+}
+
 // POST /api/v1/plans/{planId}/refine
 // Re-queues generation using the existing steps as a baseline plus the
 // requested changes. Same 202 + poll-via-Generating pattern as createPlan.
 export async function refinePlan(planId: number, payload: RefinePlanRequest): Promise<RefinePlanResponse> {
   const { data } = await apiClient.post<RefinePlanResponse>(`/api/v1/plans/${planId}/refine`, payload);
   return data;
+}
+
+// POST /api/v1/plans/{planId}/feedback
+// Best-effort signal for tuning future generations — at least one of
+// rating/tags must be present (backend 422s if both are empty).
+export async function submitPlanFeedback(
+  planId: number,
+  payload: SubmitPlanFeedbackRequest
+): Promise<void> {
+  await apiClient.post(`/api/v1/plans/${planId}/feedback`, payload);
 }
 
 // GET /api/v1/plans

@@ -1,9 +1,12 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
+import { typography } from '../theme/typography';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
 const SKILL_LABELS: Record<string, string> = {
   beginner: 'Beginner',
@@ -19,31 +22,28 @@ const TIME_LABELS: Record<string, string> = {
 
 export function PlanCard({
   plan,
-  onCopy,
-  isCopying,
+  onPress,
 }: {
   plan: Plan;
-  onCopy: () => void;
-  isCopying: boolean;
+  onPress: () => void;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  // The whole card opens a preview, and that's the only thing it does. It
+  // used to carry a bare "+" that copied the plan on one unlabelled tap —
+  // first as the card's *only* affordance, then alongside the preview once
+  // that existed. Either way it asked for a commitment without ever showing
+  // what was being committed to, so the preview (which has a labelled "Add to
+  // My Plans") is now the single path in.
   return (
-    <View style={styles.card}>
-      <TouchableOpacity
-        style={styles.copyButton}
-        onPress={onCopy}
-        disabled={isCopying}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        {isCopying ? (
-          <ActivityIndicator size="small" color={colors.textPrimary} />
-        ) : (
-          <Ionicons name="add-circle" size={30} color={colors.textPrimary} />
-        )}
-      </TouchableOpacity>
-
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`Preview plan: ${plan.title}`}
+    >
       <View style={styles.emojiWrap}>
         {plan.emoji ? (
           <Text style={styles.emoji}>{plan.emoji}</Text>
@@ -74,7 +74,7 @@ export function PlanCard({
           </View>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -84,43 +84,37 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.borderMuted,
-      borderRadius: 16,
-      padding: 20,
-      marginBottom: 16,
+      borderRadius: radius.lg,
+      padding: spacing.lg,
+      marginBottom: spacing.md,
       alignItems: 'center',
-    },
-    copyButton: {
-      position: 'absolute',
-      top: 12,
-      right: 12,
-      zIndex: 1,
     },
     emojiWrap: {
       width: 72,
       height: 72,
-      borderRadius: 20,
+      borderRadius: radius.xl,
       backgroundColor: colors.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 14,
     },
     emoji: { fontSize: 40 },
-    title: { fontSize: 17, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-    prompt: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+    title: { fontSize: typography.body.fontSize, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+    prompt: { fontSize: typography.label.fontSize, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs, lineHeight: typography.label.lineHeight },
     badgeRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: spacing.xs,
       justifyContent: 'center',
       marginTop: 14,
     },
     badge: {
       paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 20,
+      paddingHorizontal: spacing.sm,
+      borderRadius: radius.xl,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
     },
-    badgeText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+    badgeText: { fontSize: typography.small.fontSize, color: colors.textSecondary, fontWeight: '500' },
   });

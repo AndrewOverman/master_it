@@ -4,6 +4,21 @@ export interface AuthUser {
   id: number;
   name: string;
   email: string;
+  // Generation allowance, computed server-side (see UserResource) so the
+  // rolling-window and free-tier rules live in exactly one place. Optional
+  // because login/register still return the bare user shape.
+  subscription_tier?: 'free' | 'starter' | 'pro';
+  subscription_status?: 'active' | 'trialing' | 'canceled' | 'past_due' | 'expired' | null;
+  // ISO-8601, or null on free / never-subscribed. Present even when the
+  // subscription is cancelled — it's when access ends, not only when it
+  // renews, which is why Settings keys the row off this rather than the tier.
+  subscription_expires_at?: string | null;
+  can_generate?: boolean;
+  generations_remaining?: number;
+  generations_limit?: number;
+  // Only sent when can_generate is false — the same sentence the API's 429
+  // body uses, so the up-front notice and the rejection can't disagree.
+  generation_limit_message?: string;
 }
 
 export interface AuthResponse {
@@ -52,6 +67,14 @@ export async function resetPassword(payload: {
 export async function getCurrentUser(): Promise<AuthUser> {
   const { data } = await apiClient.get<AuthUser>('/api/v1/user');
   return data;
+}
+
+// DELETE /api/v1/user
+// Password-confirmed and irreversible: the backend revokes every token and
+// deletes the user (App Store Guideline 5.1.1(v) requires this be reachable
+// in-app). A wrong password comes back as a 422 with `errors.password`.
+export async function deleteAccount(payload: { password: string }): Promise<void> {
+  await apiClient.delete('/api/v1/user', { data: payload });
 }
 
 // PATCH /api/v1/user

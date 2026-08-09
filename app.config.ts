@@ -1,5 +1,10 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
-import { lightColors } from './src/theme/colors';
+// Explicit .ts extension: Expo's config loader transpiles this file
+// per-file (via ts.transpileModule) rather than resolving the whole
+// project, so it hands Node a plain `require('./src/theme/colors')` —
+// and Node's own module resolution won't append `.ts` for an
+// extensionless specifier, only for one already spelled out here.
+import { lightColors } from './src/theme/colors.ts';
 
 type Variant = 'development' | 'staging' | 'production';
 

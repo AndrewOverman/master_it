@@ -25,6 +25,12 @@ export function Button({ label, variant = 'primary', loading = false, disabled, 
     <TouchableOpacity
       style={[styles.base, styles[variant], isDisabled && styles.disabled, style]}
       disabled={isDisabled}
+      accessibilityRole="button"
+      // While loading, the label is replaced by a spinner, so without this the
+      // control announces nothing at all mid-submit. `busy` is what tells the
+      // screen reader the tap registered and something is happening.
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       {...rest}
     >
       {loading ? (

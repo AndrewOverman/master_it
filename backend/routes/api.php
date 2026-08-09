@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\PlanController;
 use App\Http\Controllers\Api\PlanStepController;
 use App\Http\Controllers\Api\RevenueCatWebhookController;
 use App\Http\Controllers\Api\SharedPlanController;
+use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,8 +24,18 @@ Route::prefix('v1')->group(function () {
 
         Route::get('user', [UserController::class, 'show']);
         Route::patch('user', [UserController::class, 'update']);
+        // Takes no body — see SubscriptionController::refresh(). Throttled
+        // because each call is an outbound request to RevenueCat, and the
+        // client retries it on a backoff after a purchase.
+        Route::post('user/subscription/refresh', [SubscriptionController::class, 'refresh'])
+            ->middleware('throttle:subscription-refresh');
         Route::get('user/export', [UserController::class, 'export']);
         Route::delete('user', [UserController::class, 'destroy']);
+
+        // Static catalog, but kept behind auth like everything else here —
+        // the paywall is only reachable when signed in, so there's no caller
+        // that needs it public.
+        Route::get('subscriptions/tiers', [SubscriptionController::class, 'tiers']);
 
         Route::get('plans', [PlanController::class, 'index']);
         Route::post('plans', [PlanController::class, 'store']);
@@ -36,7 +47,9 @@ Route::prefix('v1')->group(function () {
         Route::get('plans/{plan}', [PlanController::class, 'show']);
         Route::patch('plans/{plan}', [PlanController::class, 'update']);
         Route::post('plans/{plan}/reset', [PlanController::class, 'reset']);
+        Route::post('plans/{plan}/retry', [PlanController::class, 'retry']);
         Route::post('plans/{plan}/refine', [PlanController::class, 'refine']);
+        Route::post('plans/{plan}/feedback', [PlanController::class, 'feedback']);
         Route::post('plans/{plan}/share', [PlanController::class, 'share']);
         Route::delete('plans/{plan}/share', [PlanController::class, 'unshare']);
         Route::get('plans/{plan}/steps/{step}', [PlanStepController::class, 'show']);

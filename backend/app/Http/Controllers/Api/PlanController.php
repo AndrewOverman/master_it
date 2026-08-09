@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PlanResource;
 use App\Jobs\GeneratePlanSteps;
 use App\Models\Plan;
-use App\Models\User;
+use App\Models\PlanFeedback;
 use Illuminate\Http\Request;
 
 class PlanController extends Controller
@@ -26,7 +26,7 @@ class PlanController extends Controller
         // subscription tier (plus a one-time free generation) rather than
         // the flat per-account cap copying uses. See User::canGenerate().
         if (! $user->canGenerate()) {
-            return response()->json(['message' => $this->generationLimitMessage($user)], 429);
+            return response()->json(['message' => $user->generationLimitMessage()], 429);
         }
 
         $validated = $request->validate([
@@ -58,9 +58,48 @@ class PlanController extends Controller
         ], 201);
     }
 
-    public function show(Request $request, Plan $plan)
+    /**
+     * Re-runs generation for a plan whose job failed, reusing the inputs
+     * already stored on the plan.
+     *
+     * Deliberately does NOT call recordGeneration(): store() charges the
+     * allowance on dispatch and never refunds it, so the user has already
+     * paid for this plan once. Making them create a fresh plan instead
+     * would bill them a second time for something they never received.
+     * Only 'failed' qualifies — 'rejected' means the goal itself was out of
+     * bounds, and re-running the identical prompt would just reject again.
+     */
+    public function retry(Request $request, Plan $plan)
     {
         abort_unless($plan->user_id === $request->user()->id, 404);
+
+        if ($plan->status !== 'failed') {
+            return response()->json([
+                'message' => 'This plan is not in a state that can be retried.',
+            ], 409);
+        }
+
+        $plan->update([
+            'status' => 'generating',
+            'error_message' => null,
+        ]);
+
+        GeneratePlanSteps::dispatch($plan);
+
+        return response()->json(['id' => $plan->id, 'status' => 'generating'], 202);
+    }
+
+    public function show(Request $request, Plan $plan)
+    {
+        // Readable by its owner, or by anyone when it's a finished featured
+        // plan — the same basis copy() authorizes on. Without this there was
+        // no way to look at a featured plan's steps before adding it to your
+        // own, which made "add" a decision taken blind. Owner-only fields
+        // (share_token, latest_refinement) stay gated inside PlanResource.
+        abort_unless(
+            $plan->user_id === $request->user()->id || ($plan->is_featured && $plan->status === 'ready'),
+            404
+        );
 
         return new PlanResource($plan->load('steps'));
     }
@@ -97,7 +136,7 @@ class PlanController extends Controller
         $user = $request->user();
 
         if (! $user->canGenerate()) {
-            return response()->json(['message' => $this->generationLimitMessage($user)], 429);
+            return response()->json(['message' => $user->generationLimitMessage()], 429);
         }
 
         $validated = $request->validate([
@@ -132,6 +171,37 @@ class PlanController extends Controller
         GeneratePlanSteps::dispatch($plan, isRefinement: true);
 
         return response()->json(['id' => $plan->id, 'status' => 'generating'], 202);
+    }
+
+    public function feedback(Request $request, Plan $plan)
+    {
+        abort_unless($plan->user_id === $request->user()->id, 404);
+
+        $validated = $request->validate([
+            'rating' => ['nullable', 'integer', 'min:1', 'max:5'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'in:'.implode(',', PlanFeedback::availableTags())],
+        ]);
+
+        if (empty($validated['rating']) && empty($validated['tags'])) {
+            return response()->json([
+                'message' => 'Add a rating or at least one tag.',
+            ], 422);
+        }
+
+        // Replaces any earlier review rather than appending: finishing a plan
+        // more than once (steps can be unchecked and re-checked freely) shows
+        // the prompt again, and what we want to keep is the user's latest
+        // word on the plan, not a pile of partial impressions.
+        $plan->feedback()->updateOrCreate(
+            ['plan_id' => $plan->id],
+            [
+                'rating' => $validated['rating'] ?? null,
+                'tags' => $validated['tags'] ?? [],
+            ]
+        );
+
+        return response()->json(null, 201);
     }
 
     public function featured(Request $request)
@@ -196,10 +266,4 @@ class PlanController extends Controller
         return response()->noContent();
     }
 
-    private function generationLimitMessage(User $user): string
-    {
-        return $user->hasActiveSubscription()
-            ? "You've reached your monthly limit of {$user->monthlyGenerationLimit()} generated plans."
-            : 'You\'ve used your free plan generation. Subscribe to generate more.';
-    }
 }

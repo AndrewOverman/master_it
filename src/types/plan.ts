@@ -31,6 +31,51 @@ export interface PlanRefinement {
   created_at: string;
 }
 
+// Must stay hand-synced with PlanFeedback::TAGS on the backend
+// (backend/app/Models/PlanFeedback.php) — that's the single source of
+// truth for which tags exist and which side (positive/negative) each is on.
+export type FeedbackTag =
+  | 'well_paced'
+  | 'right_difficulty'
+  | 'clear_steps'
+  | 'helpful_resources'
+  | 'too_vague'
+  | 'too_easy'
+  | 'too_hard'
+  | 'unrealistic_timeline';
+
+export const POSITIVE_FEEDBACK_TAGS: FeedbackTag[] = [
+  'well_paced',
+  'right_difficulty',
+  'clear_steps',
+  'helpful_resources',
+];
+
+export const NEGATIVE_FEEDBACK_TAGS: FeedbackTag[] = [
+  'too_vague',
+  'too_easy',
+  'too_hard',
+  'unrealistic_timeline',
+];
+
+export const FEEDBACK_TAG_LABELS: Record<FeedbackTag, string> = {
+  well_paced: 'Well-paced',
+  right_difficulty: 'Right difficulty',
+  clear_steps: 'Clear steps',
+  helpful_resources: 'Helpful resources',
+  too_vague: 'Too vague',
+  too_easy: 'Too easy',
+  too_hard: 'Too hard',
+  unrealistic_timeline: 'Unrealistic timeline',
+};
+
+// Request body for POST /api/v1/plans/{planId}/feedback. At least one of
+// rating/tags must be present — the backend 422s if both are empty.
+export interface SubmitPlanFeedbackRequest {
+  rating?: number;
+  tags?: FeedbackTag[];
+}
+
 export interface StepResource {
   id: number;
   url: string;

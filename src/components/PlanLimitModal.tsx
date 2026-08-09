@@ -5,10 +5,22 @@ import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { Button } from './ui';
 import { shadows } from '../theme/shadows';
+import { typography } from '../theme/typography';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
 interface PlanLimitModalProps {
   visible: boolean;
   message: string;
+  // Defaults to the copy limit's wording. Generation limits (creating or
+  // refining a plan) pass their own — those are a monthly allowance, not a
+  // cap on how many plans you may keep, and saying so avoids implying the
+  // user has to delete something to continue.
+  title?: string;
+  // The way out. Without it this modal tells someone they're out of
+  // generations and offers only "Got it" — a dead end at the exact moment
+  // they've shown intent to keep going.
+  onUpgrade?: () => void;
   onDismiss: () => void;
 }
 
@@ -16,7 +28,13 @@ interface PlanLimitModalProps {
 // the user over their plan limit — replaces the generic native Alert with
 // something on-brand, since this is a distinct, expected outcome rather
 // than a bug.
-export function PlanLimitModal({ visible, message, onDismiss }: PlanLimitModalProps) {
+export function PlanLimitModal({
+  visible,
+  message,
+  title = 'Plan limit reached',
+  onUpgrade,
+  onDismiss,
+}: PlanLimitModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -25,9 +43,21 @@ export function PlanLimitModal({ visible, message, onDismiss }: PlanLimitModalPr
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Ionicons name="lock-closed-outline" size={32} color={colors.textMuted} style={styles.icon} />
-          <Text style={styles.title}>Plan limit reached</Text>
+          <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
-          <Button label="Got it" onPress={onDismiss} style={styles.button} />
+          {onUpgrade ? (
+            <>
+              <Button label="See plans" onPress={onUpgrade} style={styles.button} />
+              <Button
+                label="Not now"
+                variant="secondary"
+                onPress={onDismiss}
+                style={[styles.button, styles.secondaryButton]}
+              />
+            </>
+          ) : (
+            <Button label="Got it" onPress={onDismiss} style={styles.button} />
+          )}
         </View>
       </View>
     </Modal>
@@ -41,20 +71,21 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.overlay,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 24,
+      padding: spacing.xl,
     },
     card: {
       width: '100%',
       maxWidth: 360,
       backgroundColor: colors.surface,
-      borderRadius: 20,
+      borderRadius: radius.xl,
       paddingVertical: 28,
-      paddingHorizontal: 24,
+      paddingHorizontal: spacing.xl,
       alignItems: 'center',
       ...shadows.card,
     },
-    icon: { marginBottom: 12 },
-    title: { fontSize: 19, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
-    message: { fontSize: 14.5, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-    button: { paddingHorizontal: 32, alignSelf: 'stretch' },
+    icon: { marginBottom: spacing.sm },
+    title: { fontSize: typography.h3.fontSize, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.xs },
+    message: { fontSize: typography.label.fontSize, color: colors.textSecondary, textAlign: 'center', lineHeight: typography.label.lineHeight, marginBottom: spacing.lg },
+    button: { paddingHorizontal: spacing.xxl, alignSelf: 'stretch' },
+    secondaryButton: { marginTop: spacing.xs },
   });

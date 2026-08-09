@@ -10,29 +10,39 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPlan, setStepComplete, getRelatedPlans, sharePlan } from '../api/plans';
-import { useCopyPlan } from '../hooks/useCopyPlan';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { getPlan, getRelatedPlans, sharePlan } from '../api/plans';
 import { useRefinePlan } from '../hooks/useRefinePlan';
+import { useToggleStep } from '../hooks/useToggleStep';
+import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
 import { PlanCard } from '../components/PlanCard';
 import { PlanLimitModal } from '../components/PlanLimitModal';
 import { RefinePlanModal } from '../components/RefinePlanModal';
-import type { Plan, PlanStep, RefinementTag } from '../types/plan';
+import type { PlanStep, RefinementTag } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { useIsOnline, useRequireOnline } from '../lib/offline';
 import { formatRelativeTime } from '../utils/relativeTime';
-import { EmptyState, ProgressBar, Spinner } from '../components/ui';
+import { formatDueDate } from '../utils/dueDate';
+import { ActionSheet, EmptyState, OfflineNotice, ProgressBar, Spinner, type SheetAction } from '../components/ui';
+import { typography } from '../theme/typography';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
 export function PlanDetailScreen({ route, navigation }: any) {
   const { planId } = route.params;
-  const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isOnline = useIsOnline();
   const requireOnline = useRequireOnline();
 
-  const { data: plan, isLoading, dataUpdatedAt } = useQuery({
+  const {
+    data: plan,
+    isLoading,
+    dataUpdatedAt,
+    refetch,
+    isRefetching,
+  } = useQuery({
     queryKey: ['plan', planId],
     queryFn: () => getPlan(planId),
   });
@@ -47,9 +57,6 @@ export function PlanDetailScreen({ route, navigation }: any) {
     enabled: isOnline,
   });
 
-  const { copyMutation, handleCopyPress, limitModalVisible, limitModalMessage, dismissLimitModal } =
-    useCopyPlan(navigation);
-
   const {
     refineMutation,
     limitModalVisible: refineLimitModalVisible,
@@ -57,6 +64,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
     dismissLimitModal: dismissRefineLimitModal,
   } = useRefinePlan(navigation, planId);
   const [refineModalVisible, setRefineModalVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   // Tracks which refinement id we've already alerted on, so a failed
   // attempt surfaces its "didn't take" alert once per attempt rather than
   // re-firing every time this query refetches.
@@ -99,101 +107,65 @@ export function PlanDetailScreen({ route, navigation }: any) {
     shareMutation.mutate();
   };
 
-  // Only a finished plan is shareable (mirrors the backend's own gate on
-  // POST /plans/{plan}/share), so the button only appears once ready.
+  // One labelled menu instead of two bare glyphs. "Refine" was a sparkles
+  // icon with no label — nothing about it said it would rewrite every step
+  // and reset the user's progress, and a one-tap unlabelled control is the
+  // wrong amount of friction for an action that consequential. Share loses a
+  // tap, which is a fair trade for both actions saying what they do.
+  //
+  // Only a finished plan is shareable or refinable (mirrors the backend's own
+  // gates), so the menu only appears once ready.
   useLayoutEffect(() => {
     if (plan?.status !== 'ready') {
       navigation.setOptions({ headerRight: undefined });
       return;
     }
     navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerActions}>
+      headerRight: () =>
+        shareMutation.isPending ? (
+          <ActivityIndicator size="small" color={colors.textPrimary} />
+        ) : (
           <TouchableOpacity
-            onPress={() => setRefineModalVisible(true)}
-            disabled={refineMutation.isPending}
+            onPress={() => setMenuVisible(true)}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Plan actions"
           >
-            <Ionicons name="sparkles-outline" size={22} color={colors.textPrimary} />
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleSharePress}
-            disabled={shareMutation.isPending}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            {shareMutation.isPending ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
-            ) : (
-              <Ionicons name="share-outline" size={24} color={colors.textPrimary} />
-            )}
-          </TouchableOpacity>
-        </View>
-      ),
+        ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation, plan?.status, shareMutation.isPending, refineMutation.isPending, colors]);
+  }, [navigation, plan?.status, shareMutation.isPending, colors]);
 
-  const applyStepCompletion = (plan: Plan, stepId: number, completed: boolean): Plan => ({
-    ...plan,
-    steps: plan.steps.map((step) =>
-      step.id === stepId ? { ...step, completed_at: completed ? new Date().toISOString() : null } : step
-    ),
-  });
+  const menuActions: SheetAction[] = [
+    {
+      label: 'Share plan',
+      icon: 'share-outline',
+      onPress: () => {
+        setMenuVisible(false);
+        handleSharePress();
+      },
+    },
+    {
+      label: 'Refine plan',
+      icon: 'sparkles-outline',
+      onPress: () => {
+        setMenuVisible(false);
+        setRefineModalVisible(true);
+      },
+    },
+  ];
 
-  const toggleMutation = useMutation({
-    mutationFn: ({ stepId, completed }: { stepId: number; completed: boolean }) =>
-      setStepComplete(planId, stepId, completed),
-    // Optimistic update so checking a step feels instant. Also patches the
-    // ['plans'] list cache — the My Plans screen stays mounted underneath
-    // (React Navigation doesn't unmount screens on push), so without this
-    // its steps-complete count stays stale until something else refetches it.
-    onMutate: async ({ stepId, completed }) => {
-      await queryClient.cancelQueries({ queryKey: ['plan', planId] });
-      const previousPlan = queryClient.getQueryData<Plan>(['plan', planId]);
-      const previousPlans = queryClient.getQueryData<Plan[]>(['plans']);
-
-      queryClient.setQueryData<Plan>(['plan', planId], (old) =>
-        old ? applyStepCompletion(old, stepId, completed) : old
-      );
-      queryClient.setQueryData<Plan[]>(['plans'], (old) =>
-        old?.map((plan) => (plan.id === planId ? applyStepCompletion(plan, stepId, completed) : plan))
-      );
-
-      return { previousPlan, previousPlans };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previousPlan) {
-        queryClient.setQueryData(['plan', planId], context.previousPlan);
-      }
-      if (context?.previousPlans) {
-        queryClient.setQueryData(['plans'], context.previousPlans);
-      }
-    },
-    // Celebrate only on the transition into "every step done" — checking off
-    // a step in an already-complete plan (shouldn't normally happen, but
-    // just in case) shouldn't re-trigger it. The celebration overlay itself
-    // lives on PlansList, so hop back there with a flag for it to pick up.
-    onSuccess: (updatedStep, { stepId, completed }) => {
-      if (!completed) return;
-      const latestPlan = queryClient.getQueryData<Plan>(['plan', planId]);
-      if (!latestPlan) return;
-      const stepsAfter = latestPlan.steps.map((step) =>
-        step.id === stepId ? { ...step, completed_at: updatedStep.completed_at } : step
-      );
-      const allStepsComplete = stepsAfter.length > 0 && stepsAfter.every((step) => step.completed_at);
-      if (allStepsComplete) {
-        navigation.navigate('PlansList', { celebrate: true });
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-      queryClient.invalidateQueries({ queryKey: ['plans'] });
-    },
-  });
+  const [celebratingPlanId, setCelebratingPlanId] = useState<number | null>(null);
+  const { toggleStep } = useToggleStep(planId, setCelebratingPlanId);
 
   const completedCount = plan?.steps.filter((step) => step.completed_at).length ?? 0;
   const totalSteps = plan?.steps.length ?? 0;
   const progressRatio = totalSteps > 0 ? completedCount / totalSteps : 0;
+  // Drives the "plan complete" banner only — steps stay editable either way,
+  // so a mis-tap on the last one costs a second tap rather than the plan.
+  const isPlanComplete = totalSteps > 0 && completedCount === totalSteps;
 
   if (isLoading || !plan) {
     if (!isOnline) {
@@ -208,14 +180,22 @@ export function PlanDetailScreen({ route, navigation }: any) {
 
   const renderStep = ({ item }: { item: PlanStep }) => {
     const completed = Boolean(item.completed_at);
+    const due = item.due_date ? formatDueDate(item.due_date) : null;
+    // A finished step can't be late — flagging it red would just be nagging
+    // about something the user already did.
+    const showOverdue = due?.isOverdue && !completed;
 
     return (
       <View style={styles.stepRow}>
         <TouchableOpacity
           style={styles.checkboxTouchable}
+          accessibilityRole="checkbox"
+          accessibilityLabel={item.title}
+          accessibilityState={{ checked: completed }}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           onPress={() => {
             if (!requireOnline('check off a step')) return;
-            toggleMutation.mutate({ stepId: item.id, completed: !completed });
+            toggleStep({ stepId: item.id, completed: !completed });
           }}
         >
           <View style={[styles.checkbox, completed && styles.checkboxChecked]}>
@@ -226,13 +206,19 @@ export function PlanDetailScreen({ route, navigation }: any) {
         <TouchableOpacity
           style={styles.stepContent}
           onPress={() => navigation.navigate('StepDetail', { planId, stepId: item.id })}
+          accessibilityRole="button"
+          accessibilityLabel={`Open step: ${item.title}`}
         >
           <View style={styles.stepText}>
             <Text style={[styles.stepTitle, completed && styles.stepTitleDone]}>{item.title}</Text>
             <Text style={styles.stepDescription} numberOfLines={2}>
               {item.description}
             </Text>
-            {item.due_date && <Text style={styles.stepDueDate}>Aiming for {item.due_date}</Text>}
+            {due && (
+              <Text style={[styles.stepDueDate, showOverdue && styles.stepDueDateOverdue]}>
+                {showOverdue ? `Due ${due.text}` : `Aiming for ${due.text}`}
+              </Text>
+            )}
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </TouchableOpacity>
@@ -242,31 +228,73 @@ export function PlanDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <PlanLimitModal visible={limitModalVisible} message={limitModalMessage} onDismiss={dismissLimitModal} />
       <PlanLimitModal
         visible={refineLimitModalVisible}
+        title="Out of plan generations"
         message={refineLimitModalMessage}
+        onUpgrade={() => {
+          // Dismiss before navigating, or the paywall stacks on top of this
+          // modal and closing it reveals the limit modal again behind.
+          dismissRefineLimitModal();
+          navigation.navigate('Paywall');
+        }}
         onDismiss={dismissRefineLimitModal}
       />
       <RefinePlanModal
         visible={refineModalVisible}
         isSubmitting={refineMutation.isPending}
+        completedSteps={completedCount}
         onSubmit={handleRefineSubmit}
         onDismiss={() => setRefineModalVisible(false)}
+      />
+      {/* Celebrated right here, on the screen where the user finished the
+          plan. This used to navigate to My Plans purely because that's where
+          the overlay lived, which meant finishing a plan yanked you out of
+          the thing you'd just completed. */}
+      <ActionSheet
+        visible={menuVisible}
+        title={plan.title}
+        actions={menuActions}
+        onDismiss={() => setMenuVisible(false)}
+      />
+      <PlanCompleteOverlay
+        visible={celebratingPlanId !== null}
+        planId={celebratingPlanId}
+        onDismiss={() => setCelebratingPlanId(null)}
       />
       <View style={styles.header}>
         <Text style={styles.planTitle}>{plan.title}</Text>
         <Text style={styles.progress}>
           {completedCount} of {plan.steps.length} steps complete
         </Text>
-        <ProgressBar ratio={progressRatio} animateOnMount style={styles.progressTrack} />
-        {!isOnline && (
-          <View style={styles.offlineRow}>
-            <Ionicons name="cloud-offline-outline" size={13} color={colors.textPlaceholder} />
-            <Text style={styles.offlineText}>
-              You're offline{syncedLabel ? ` — synced ${syncedLabel}` : ''}. Editing is disabled until you're back online.
+        <ProgressBar
+          ratio={progressRatio}
+          animateOnMount
+          style={styles.progressTrack}
+          label="Plan progress"
+          valueText={`${completedCount} of ${plan.steps.length} steps complete`}
+        />
+        {isPlanComplete && (
+          <View style={styles.completeRow}>
+            <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+            <Text style={styles.completeText}>
+              Plan complete — nice work. Uncheck any step to pick it back up.
             </Text>
           </View>
+        )}
+        {/* The other kind of "done": the user closed this plan out without
+            finishing every step. Worth saying so, since the checklist below
+            still shows unchecked items and would otherwise look untouched. */}
+        {Boolean(plan.completed_at) && !isPlanComplete && (
+          <View style={styles.completeRow}>
+            <Ionicons name="flag" size={14} color={colors.textMuted} />
+            <Text style={styles.completeText}>
+              You marked this plan done. Its steps are still yours to check off.
+            </Text>
+          </View>
+        )}
+        {!isOnline && (
+          <OfflineNotice syncedLabel={syncedLabel} style={styles.offlineNotice} />
         )}
       </View>
       <FlatList
@@ -274,6 +302,11 @@ export function PlanDetailScreen({ route, navigation }: any) {
         keyExtractor={(step) => String(step.id)}
         renderItem={renderStep}
         contentContainerStyle={styles.list}
+        // This is the screen most likely to be stale — steps can be checked
+        // off from Today, and a plan can be refined or reset from the list —
+        // and it was the only main list without pull-to-refresh.
+        refreshing={isRefetching}
+        onRefresh={refetch}
         ListFooterComponent={
           relatedPlans && relatedPlans.length > 0 ? (
             <View style={styles.relatedSection}>
@@ -282,8 +315,15 @@ export function PlanDetailScreen({ route, navigation }: any) {
                 <PlanCard
                   key={related.id}
                   plan={related}
-                  onCopy={() => handleCopyPress(related)}
-                  isCopying={copyMutation.isPending && copyMutation.variables === related.id}
+                  // Preview lives in the Explore stack, so this crosses tabs
+                  // rather than pushing a second copy of it here — same rule
+                  // the other direction already follows for copied plans.
+                  onPress={() =>
+                    navigation.navigate('Explore', {
+                      screen: 'FeaturedPlan',
+                      params: { planId: related.id },
+                    })
+                  }
                 />
               ))}
             </View>
@@ -297,22 +337,23 @@ export function PlanDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-    header: { padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
-    planTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
-    progress: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    header: { padding: spacing.lg, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
+    planTitle: { fontSize: typography.h2.fontSize, fontWeight: '700', color: colors.textPrimary },
+    progress: { fontSize: typography.caption.fontSize, color: colors.textMuted, marginTop: spacing.xxs },
     progressTrack: { marginTop: 10 },
-    offlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-    offlineText: { flex: 1, fontSize: 12, color: colors.textPlaceholder },
-    list: { padding: 20 },
-    relatedSection: { marginTop: 12, paddingTop: 24, borderTopWidth: 1, borderTopColor: colors.borderMuted },
-    relatedTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 16 },
-    stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+    completeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.xs },
+    completeText: { flex: 1, fontSize: typography.small.fontSize, color: colors.textMuted },
+    offlineNotice: { marginTop: spacing.sm, marginBottom: 0 },
+    list: { padding: spacing.lg },
+    relatedSection: { marginTop: spacing.sm, paddingTop: spacing.xl, borderTopWidth: 1, borderTopColor: colors.borderMuted },
+    relatedTitle: { fontSize: typography.h3.fontSize, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
+    stepRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.lg },
     checkboxTouchable: { paddingTop: 2 },
     checkbox: {
       width: 24,
       height: 24,
-      borderRadius: 12,
+      borderRadius: radius.md,
       borderWidth: 2,
       borderColor: colors.border,
       alignItems: 'center',
@@ -322,8 +363,9 @@ const createStyles = (colors: ThemeColors) =>
     checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
     stepContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
     stepText: { flex: 1 },
-    stepTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+    stepTitle: { fontSize: typography.body.fontSize, fontWeight: '600', color: colors.textPrimary },
     stepTitleDone: { textDecorationLine: 'line-through', color: colors.textPlaceholder },
-    stepDescription: { fontSize: 14, color: colors.textMuted, marginTop: 4 },
-    stepDueDate: { fontSize: 12, color: colors.textPlaceholder, marginTop: 4 },
+    stepDescription: { fontSize: typography.label.fontSize, color: colors.textMuted, marginTop: spacing.xxs },
+    stepDueDate: { fontSize: typography.small.fontSize, color: colors.textPlaceholder, marginTop: spacing.xxs },
+    stepDueDateOverdue: { color: colors.destructive, fontWeight: '600' },
   });

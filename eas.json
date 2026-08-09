@@ -25,7 +25,7 @@
       "autoIncrement": true,
       "env": {
         "APP_VARIANT": "production",
-        "EXPO_PUBLIC_API_URL": "https://<production-api-domain>.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://api-production-2e5ce.up.railway.app"
       }
     }
   }

@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   DarkTheme,
   DefaultTheme,
   NavigationContainer,
-  DrawerActions,
   useNavigation,
   useNavigationContainerRef,
 } from '@react-navigation/native';
@@ -14,42 +13,81 @@ import {
   createNativeStackNavigator,
   type NativeStackHeaderProps,
 } from '@react-navigation/native-stack';
-import {
-  createDrawerNavigator,
-  DrawerContentScrollView,
-  DrawerItem,
-  type DrawerContentComponentProps,
-} from '@react-navigation/drawer';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { NewPlanScreen } from '../screens/NewPlanScreen';
 import { GeneratingScreen } from '../screens/GeneratingScreen';
 import { PlanDetailScreen } from '../screens/PlanDetailScreen';
+import { PlanFailedScreen } from '../screens/PlanFailedScreen';
+import { PlanRejectedScreen } from '../screens/PlanRejectedScreen';
 import { StepDetailScreen } from '../screens/StepDetailScreen';
 import { PlansListScreen } from '../screens/PlansListScreen';
+import { TodayScreen } from '../screens/TodayScreen';
 import { FeaturedPlansScreen } from '../screens/FeaturedPlansScreen';
 import { SharedPlanScreen } from '../screens/SharedPlanScreen';
+import { FeaturedPlanScreen } from '../screens/FeaturedPlanScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AccountScreen } from '../screens/AccountScreen';
+import { PaywallScreen } from '../screens/PaywallScreen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useFeaturedOfflineSampleSync } from '../hooks/useFeaturedOfflineSample';
 import type { ThemeColors } from '../theme/colors';
 import { Spinner } from '../components/ui';
+import { typography } from '../theme/typography';
+import { spacing } from '../theme/spacing';
 
-export type AppStackParamList = {
-  Featured: undefined;
+// One stack per tab, rather than a single stack shared by everything.
+// Previously Account and Settings were pushed onto the same stack as the
+// plan flow, so backing out of Account landed on Settings, and the stack
+// only ever grew. Now each tab keeps its own history.
+//
+// Screens that operate on the user's *own* plans live in the Plans stack and
+// only there. Explore-side actions that produce or open one of your plans
+// (copying a featured plan, adding a shared one) jump to the Plans tab
+// instead of getting duplicate copies of those screens — a plan you own
+// belongs in one place.
+export type PlansStackParamList = {
+  Today: undefined;
+  PlansList: undefined;
   NewPlan: undefined;
   Generating: { planId: number };
   PlanDetail: { planId: number };
   StepDetail: { planId: number; stepId: number };
   PlanFailed: { planId: number; message: string | null };
   PlanRejected: { planId: number };
-  PlansList: { celebrate?: boolean } | undefined;
+};
+
+export type ExploreStackParamList = {
+  Featured: undefined;
+  FeaturedPlan: { planId: number };
   SharedPlan: { token: string };
-  Settings: undefined;
+};
+
+export type MeStackParamList = {
   Account: undefined;
+  Settings: undefined;
+};
+
+export type MainTabParamList = {
+  Today: undefined;
+  Explore: undefined;
+  Me: undefined;
+};
+
+export type RootStackParamList = {
+  Login: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token: string; email: string };
+  Main: undefined;
+  // Root-level rather than inside a tab stack: the paywall is reachable from
+  // the new-plan form, the refine flow and Settings, and duplicating it into
+  // each stack (or bouncing the user to the Me tab mid-flow, losing a
+  // half-filled form) are both worse. As a modal it dismisses back to
+  // wherever it was opened from.
+  Paywall: undefined;
 };
 
 // Pulls the token out of a masterit://plans/shared/{token} deep link (and
@@ -82,55 +120,11 @@ function extractResetParams(url: string | null): { token: string; email: string 
   return params.token && params.email ? { token: params.token, email: params.email } : null;
 }
 
-export type RootStackParamList = {
-  Login: undefined;
-  ForgotPassword: undefined;
-  ResetPassword: { token: string; email: string };
-  Main: undefined;
-};
-
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const AppStack = createNativeStackNavigator<AppStackParamList>();
-const Drawer = createDrawerNavigator();
-
-// Minimal fallback screen if generation fails server-side
-function PlanFailedScreen({ route, navigation }: any) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  return (
-    <View style={styles.failedContainer}>
-      <Text style={styles.failedTitle}>Couldn't build your plan</Text>
-      <Text style={styles.failedMessage}>
-        {route.params?.message ?? 'Something went wrong generating this plan. Please try again.'}
-      </Text>
-      <Text style={styles.retryLink} onPress={() => navigation.navigate('NewPlan')}>
-        Try again
-      </Text>
-    </View>
-  );
-}
-
-// Shown when the backend declines to generate a plan for the submitted
-// goal (Plan.status === 'rejected'). Deliberately separate from
-// PlanFailedScreen: "failed" implies a bug worth retrying as-is, this
-// implies a boundary — the copy stays neutral and non-accusatory, never
-// echoes the user's prompt or the model's internal category/reason back
-// at them, and always leaves a way forward.
-function PlanRejectedScreen({ navigation }: any) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  return (
-    <View style={styles.failedContainer}>
-      <Text style={styles.failedTitle}>We can't build a plan for that</Text>
-      <Text style={styles.failedMessage}>
-        This request falls outside what Master It can help with. Try rephrasing your goal.
-      </Text>
-      <Text style={styles.retryLink} onPress={() => navigation.navigate('NewPlan')}>
-        Start a new plan
-      </Text>
-    </View>
-  );
-}
+const PlansStack = createNativeStackNavigator<PlansStackParamList>();
+const ExploreStack = createNativeStackNavigator<ExploreStackParamList>();
+const MeStack = createNativeStackNavigator<MeStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function BackButton() {
   const navigation = useNavigation();
@@ -139,35 +133,25 @@ function BackButton() {
     <TouchableOpacity
       onPress={() => navigation.goBack()}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      accessibilityRole="button"
+      accessibilityLabel="Go back"
     >
       <Ionicons name="chevron-back" size={28} color={colors.textPrimary} />
     </TouchableOpacity>
   );
 }
 
-// Featured is the landing screen and the app's core action ("describe a
-// goal, get a plan") deserves a presence there, not just a two-tap detour
-// through the drawer to My Plans' FAB.
-function NewPlanHeaderButton() {
-  const navigation = useNavigation();
-  const { colors } = useTheme();
-  return (
-    <TouchableOpacity
-      onPress={() => (navigation.navigate as any)('NewPlan')}
-      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-      accessibilityLabel="New plan"
-    >
-      <Ionicons name="add-circle-outline" size={28} color={colors.accent} />
-    </TouchableOpacity>
-  );
-}
-
 // Native headers on iOS can't be resized via style props (they're a real
 // UINavigationBar), so this replaces the header entirely to get a taller
-// bar and a bigger hamburger icon. Screens can still override the left
-// slot the normal way via `options.headerLeft` (e.g. GeneratingScreen
-// hides it during generation).
-function AppHeader({ options }: NativeStackHeaderProps) {
+// bar and bigger touch targets.
+//
+// The left slot is now driven by `back`: any pushed screen gets a back
+// button automatically, and each tab's root screen gets nothing. That's what
+// fixes New Plan, which used to show a hamburger — leaving someone who
+// opened it by mistake with no visible way out. Screens can still override
+// the slot via `options.headerLeft` (GeneratingScreen suppresses it while a
+// plan is being built).
+function AppHeader({ options, back }: NativeStackHeaderProps) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -182,18 +166,17 @@ function AppHeader({ options }: NativeStackHeaderProps) {
     >
       <View style={styles.headerContent}>
         <View style={styles.headerSlot}>
-          {options.headerLeft ? (
-            options.headerLeft({ canGoBack: navigation.canGoBack() })
-          ) : (
-            <TouchableOpacity
-              onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Ionicons name="menu-outline" size={28} color={colors.textPrimary} />
-            </TouchableOpacity>
-          )}
+          {options.headerLeft
+            ? options.headerLeft({ canGoBack: navigation.canGoBack() })
+            : back
+              ? <BackButton />
+              : null}
         </View>
-        <Text style={styles.headerTitle} numberOfLines={1}>
+        {/* Two lines, not one: the slot is only as wide as the screen minus
+            two 60pt gutters, so at large Dynamic Type sizes even the short
+            static titles ran out of room. The bar has a minHeight rather than
+            a fixed height, so a second line grows it instead of clipping. */}
+        <Text style={styles.headerTitle} numberOfLines={2}>
           {options.title}
         </Text>
         <View style={[styles.headerSlot, styles.headerRightSlot]}>
@@ -204,149 +187,131 @@ function AppHeader({ options }: NativeStackHeaderProps) {
   );
 }
 
-function AppStackNavigator() {
+// A modal is dismissed, not backed out of — a chevron-back in a sheet that
+// slid up from the bottom points the wrong way. Only used by the paywall.
+function CloseButton() {
+  const navigation = useNavigation();
+  const { colors } = useTheme();
   return (
-    <AppStack.Navigator
-      initialRouteName="Featured"
-      screenOptions={{ headerShown: true, header: (props) => <AppHeader {...props} /> }}
+    <TouchableOpacity
+      onPress={() => navigation.goBack()}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      accessibilityRole="button"
+      accessibilityLabel="Close"
     >
-      <AppStack.Screen
-        name="Featured"
-        component={FeaturedPlansScreen}
-        options={{ title: 'Featured Plans', headerRight: () => <NewPlanHeaderButton /> }}
-      />
-      <AppStack.Screen name="NewPlan" component={NewPlanScreen} options={{ title: 'New Plan' }} />
-      <AppStack.Screen
+      <Ionicons name="close" size={28} color={colors.textPrimary} />
+    </TouchableOpacity>
+  );
+}
+
+// The drawer used to be the only route to Settings. With it gone, the Me
+// tab's root screen carries the entry point instead.
+function SettingsButton() {
+  const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Settings')}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      accessibilityRole="button"
+      accessibilityLabel="Settings"
+    >
+      <Ionicons name="settings-outline" size={24} color={colors.textPrimary} />
+    </TouchableOpacity>
+  );
+}
+
+const stackScreenOptions = {
+  headerShown: true,
+  header: (props: NativeStackHeaderProps) => <AppHeader {...props} />,
+};
+
+function PlansStackNavigator() {
+  return (
+    <PlansStack.Navigator initialRouteName="Today" screenOptions={stackScreenOptions}>
+      <PlansStack.Screen name="Today" component={TodayScreen} options={{ title: 'Today' }} />
+      <PlansStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'All Plans' }} />
+      <PlansStack.Screen name="NewPlan" component={NewPlanScreen} options={{ title: 'New Plan' }} />
+      <PlansStack.Screen
         name="Generating"
         component={GeneratingScreen}
         options={{ title: 'Building your plan', headerBackVisible: false, headerLeft: () => null }}
       />
-      <AppStack.Screen
-        name="PlanDetail"
-        component={PlanDetailScreen}
-        options={{ title: 'My Plan', headerLeft: () => <BackButton /> }}
+      <PlansStack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: 'My Plan' }} />
+      <PlansStack.Screen name="StepDetail" component={StepDetailScreen} options={{ title: 'Step' }} />
+      <PlansStack.Screen name="PlanFailed" component={PlanFailedScreen} options={{ title: 'Plan Failed' }} />
+      <PlansStack.Screen
+        name="PlanRejected"
+        component={PlanRejectedScreen}
+        options={{ title: 'Plan Not Available' }}
       />
-      <AppStack.Screen
-        name="StepDetail"
-        component={StepDetailScreen}
-        options={{ title: 'Step', headerLeft: () => <BackButton /> }}
-      />
-      <AppStack.Screen name="PlanFailed" component={PlanFailedScreen} options={{ title: 'Plan Failed' }} />
-      <AppStack.Screen name="PlanRejected" component={PlanRejectedScreen} options={{ title: 'Plan Not Available' }} />
-      <AppStack.Screen name="PlansList" component={PlansListScreen} options={{ title: 'My Plans' }} />
-      <AppStack.Screen
-        name="SharedPlan"
-        component={SharedPlanScreen}
-        options={{ title: 'Shared Plan', headerLeft: () => <BackButton /> }}
-      />
-
-      <AppStack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
-      <AppStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-      
-    </AppStack.Navigator>
+    </PlansStack.Navigator>
   );
 }
 
-function DrawerContent(props: DrawerContentComponentProps) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
+function ExploreStackNavigator() {
   return (
-    <View style={styles.drawerContainer}>
-      <SafeAreaView edges={['top']} style={styles.drawerHeader}>
-        <Text style={styles.drawerTitle}>Master It</Text>
-        <Text style={styles.drawerSubtitle}>Build. Track. Finish.</Text>
-      </SafeAreaView>
-
-      <View style={styles.drawerDivider} />
-
-      <DrawerContentScrollView
-        {...props}
-        style={styles.drawerScroll}
-        contentContainerStyle={styles.drawerContent}
-      >
-        <DrawerItem
-          label="Featured"
-          labelStyle={styles.drawerItemLabel}
-          icon={({ size, color }) => <Ionicons name="sparkles-outline" size={size} color={color} />}
-          activeTintColor={colors.textPrimary}
-          inactiveTintColor={colors.textSecondary}
-          activeBackgroundColor={colors.surfaceMuted}
-          pressColor={colors.surfaceMuted}
-          style={styles.drawerItem}
-          onPress={() => {
-            props.navigation.navigate('App', { screen: 'Featured' });
-            props.navigation.dispatch(DrawerActions.closeDrawer());
-          }}
-        />
-        <DrawerItem
-          label="Plans"
-          labelStyle={styles.drawerItemLabel}
-          icon={({ size, color }) => <Ionicons name="list-outline" size={size} color={color} />}
-          activeTintColor={colors.textPrimary}
-          inactiveTintColor={colors.textSecondary}
-          activeBackgroundColor={colors.surfaceMuted}
-          pressColor={colors.surfaceMuted}
-          style={styles.drawerItem}
-          onPress={() => {
-            props.navigation.navigate('App', { screen: 'PlansList' });
-            props.navigation.dispatch(DrawerActions.closeDrawer());
-          }}
-        />
-      </DrawerContentScrollView>
-
-      <SafeAreaView edges={['bottom']} style={styles.drawerFooter}>
-        <View style={styles.drawerDivider} />
-        <View style={styles.drawerFooterContent}>
-          <DrawerItem
-            label="Account"
-            labelStyle={styles.drawerItemLabel}
-            icon={({ size, color }) => <Ionicons name="person-circle-outline" size={size} color={color} />}
-            activeTintColor={colors.textPrimary}
-            inactiveTintColor={colors.textSecondary}
-            activeBackgroundColor={colors.surfaceMuted}
-            pressColor={colors.surfaceMuted}
-            style={styles.drawerItem}
-            onPress={() => {
-              props.navigation.navigate('App', { screen: 'Account' });
-              props.navigation.dispatch(DrawerActions.closeDrawer());
-            }}
-          />
-          <DrawerItem
-            label="Settings"
-            labelStyle={styles.drawerItemLabel}
-            icon={({ size, color }) => <Ionicons name="settings-outline" size={size} color={color} />}
-            activeTintColor={colors.textPrimary}
-            inactiveTintColor={colors.textSecondary}
-            activeBackgroundColor={colors.surfaceMuted}
-            pressColor={colors.surfaceMuted}
-            style={styles.drawerItem}
-            onPress={() => {
-              props.navigation.navigate('App', { screen: 'Settings' });
-              props.navigation.dispatch(DrawerActions.closeDrawer());
-            }}
-          />
-        </View>
-      </SafeAreaView>
-    </View>
+    <ExploreStack.Navigator initialRouteName="Featured" screenOptions={stackScreenOptions}>
+      <ExploreStack.Screen
+        name="Featured"
+        component={FeaturedPlansScreen}
+        options={{ title: 'Featured Plans' }}
+      />
+      <ExploreStack.Screen
+        name="FeaturedPlan"
+        component={FeaturedPlanScreen}
+        options={{ title: 'Plan Preview' }}
+      />
+      <ExploreStack.Screen name="SharedPlan" component={SharedPlanScreen} options={{ title: 'Shared Plan' }} />
+    </ExploreStack.Navigator>
   );
 }
+
+function MeStackNavigator() {
+  return (
+    <MeStack.Navigator initialRouteName="Account" screenOptions={stackScreenOptions}>
+      <MeStack.Screen
+        name="Account"
+        component={AccountScreen}
+        options={{ title: 'Account', headerRight: () => <SettingsButton /> }}
+      />
+      <MeStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+    </MeStack.Navigator>
+  );
+}
+
+const TAB_ICONS: Record<keyof MainTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
+  Today: { active: 'today', inactive: 'today-outline' },
+  Explore: { active: 'compass', inactive: 'compass-outline' },
+  Me: { active: 'person-circle', inactive: 'person-circle-outline' },
+};
 
 function MainNavigator() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   useFeaturedOfflineSampleSync();
+
   return (
-    <Drawer.Navigator
-      drawerContent={(props) => <DrawerContent {...props} />}
-      screenOptions={{
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
         headerShown: false,
-        drawerStyle: styles.drawer,
-        overlayColor: colors.overlay,
-      }}
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarIcon: ({ focused, color, size }) => (
+          <Ionicons
+            name={TAB_ICONS[route.name as keyof MainTabParamList][focused ? 'active' : 'inactive']}
+            size={size}
+            color={color}
+          />
+        ),
+      })}
     >
-      <Drawer.Screen name="App" component={AppStackNavigator} />
-    </Drawer.Navigator>
+      <Tab.Screen name="Today" component={PlansStackNavigator} />
+      <Tab.Screen name="Explore" component={ExploreStackNavigator} />
+      <Tab.Screen name="Me" component={MeStackNavigator} />
+    </Tab.Navigator>
   );
 }
 
@@ -357,7 +322,6 @@ function MainNavigator() {
 function RootNavigatorContent() {
   const { isAuthenticated } = useAuth();
   const { colors, colorScheme } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
   const navigationRef = useNavigationContainerRef();
   const [pendingShareToken, setPendingShareToken] = useState<string | null>(null);
   const [pendingResetParams, setPendingResetParams] = useState<{ token: string; email: string } | null>(
@@ -392,7 +356,7 @@ function RootNavigatorContent() {
       if (cancelled) return;
       if (navigationRef.isReady()) {
         (navigationRef.navigate as any)('Main', {
-          screen: 'App',
+          screen: 'Explore',
           params: { screen: 'SharedPlan', params: { token } },
         });
         setPendingShareToken(null);
@@ -455,7 +419,20 @@ function RootNavigatorContent() {
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <RootStack.Screen name="Main" component={MainNavigator} />
+          <>
+            <RootStack.Screen name="Main" component={MainNavigator} />
+            <RootStack.Screen
+              name="Paywall"
+              component={PaywallScreen}
+              options={{
+                presentation: 'modal',
+                headerShown: true,
+                header: (props) => <AppHeader {...props} />,
+                headerLeft: () => <CloseButton />,
+                title: 'Upgrade',
+              }}
+            />
+          </>
         ) : (
           <>
             <RootStack.Screen name="Login" component={LoginScreen} />
@@ -478,30 +455,18 @@ export function RootNavigator() {
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    failedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    failedTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
-    failedMessage: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: 20 },
-    retryLink: { fontSize: 15, color: colors.accent, fontWeight: '600' },
     header: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     headerContent: {
-      height: 68,
+      // minHeight, not height: the title scales with Dynamic Type, and a fixed
+      // 68 clipped it at the larger accessibility sizes.
+      minHeight: 68,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 8,
+      paddingHorizontal: spacing.xs,
     },
     headerSlot: { width: 60, alignItems: 'flex-start', justifyContent: 'center' },
     headerRightSlot: { alignItems: 'flex-end' },
-    headerTitle: { flex: 1, textAlign: 'center', fontSize: 19, fontWeight: '700', color: colors.textPrimary },
-    drawer: { width: 280 },
-    drawerContainer: { flex: 1, backgroundColor: colors.surface },
-    drawerHeader: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
-    drawerTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
-    drawerSubtitle: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
-    drawerDivider: { height: 1, backgroundColor: colors.borderMuted },
-    drawerScroll: { flex: 1 },
-    drawerContent: { paddingTop: 8, paddingHorizontal: 8 },
-    drawerFooter: { backgroundColor: colors.surface },
-    drawerFooterContent: { paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
-    drawerItem: { borderRadius: 10 },
-    drawerItemLabel: { fontSize: 15, fontWeight: '600' },
+    headerTitle: { flex: 1, textAlign: 'center', fontSize: typography.h3.fontSize, fontWeight: '700', color: colors.textPrimary },
+    tabBar: { backgroundColor: colors.surface, borderTopColor: colors.borderMuted },
+    tabBarLabel: { fontSize: typography.small.fontSize, fontWeight: '600' },
   });

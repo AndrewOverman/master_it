@@ -1,5 +1,8 @@
 import React, { Component, type ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
+import { typography } from '../theme/typography';
+import { radius } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
 interface Props {
   children: ReactNode;
@@ -23,7 +26,12 @@ function ErrorFallback({ onRetry }: { onRetry: () => void }) {
       <Text style={[styles.subtitle, { color: colors.muted }]}>
         The app hit an unexpected error. Try again, or restart the app if it keeps happening.
       </Text>
-      <TouchableOpacity style={[styles.button, { backgroundColor: colors.button }]} onPress={onRetry}>
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: colors.button }]}
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel="Try again"
+      >
         <Text style={[styles.buttonText, { color: colors.buttonText }]}>Try Again</Text>
       </TouchableOpacity>
     </View>
@@ -61,26 +69,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
   },
   title: {
-    fontSize: 20,
+    fontSize: typography.h2.fontSize,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: typography.bodyMedium.fontSize,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xl,
   },
   button: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingVertical: 14,
     paddingHorizontal: 28,
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: typography.body.fontSize,
     fontWeight: '600',
   },
 });

@@ -45,6 +45,14 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($request->ip());
         });
 
+        // Each call makes an outbound request to RevenueCat, and the client
+        // polls this on a backoff after a purchase. Keyed by user, not IP —
+        // the limit protects our RevenueCat quota per account, and several
+        // users can legitimately share an IP on the same network.
+        RateLimiter::for('subscription-refresh', function (Request $request) {
+            return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
+        });
+
         // Password::sendResetLink() already throttles re-sends to the same
         // email every 60s on its own — this is the outer guard against one
         // IP working through many different emails, so it's keyed by IP
