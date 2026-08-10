@@ -9,6 +9,7 @@ import { Button } from '../components/ui';
 import { typography } from '../theme/typography';
 import { spacing } from '../theme/spacing';
 import { track } from '../lib/analytics';
+import { primePushPermission } from '../lib/pushNotifications';
 
 // Generation has no real backend progress signal (GeneratePlanSteps flips
 // status once, start to finish), so these stages are a timed simulation
@@ -111,6 +112,12 @@ export function GeneratingScreen({ route, navigation }: any) {
           waited_ms: Date.now() - startedAt.current,
         },
       });
+
+      // The permission prompt is spent the first time it's shown, so it's
+      // asked here rather than at launch: the user has just watched a plan
+      // of dated steps appear, which is the only moment "we'll remind you
+      // about these" explains itself. No-ops if already decided.
+      primePushPermission();
     } else if (plan.status === 'failed') {
       outcomeTracked.current = true;
       track({ name: 'plan_generation_failed' });

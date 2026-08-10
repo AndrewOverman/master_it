@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Plan;
+use App\Services\PlanNotifier;
 use App\Services\YouTubeVideoSearchService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -289,6 +290,13 @@ class GeneratePlanSteps implements ShouldQueue
                 $this->plan->update(['status' => 'ready']);
                 $this->plan->latestRefinement?->update(['status' => 'failed']);
 
+                // Deliberately *not* a "your plan is ready" notification,
+                // even though the status column now says ready. This path
+                // restores a plan that was already working — telling the
+                // user it's ready would read as their refinement having
+                // succeeded.
+                $this->notifier()->refinementFailed($this->plan);
+
                 return;
             }
 
@@ -296,6 +304,8 @@ class GeneratePlanSteps implements ShouldQueue
                 'status' => 'rejected',
                 'rejection_category' => $result['category'],
             ]);
+
+            $this->notifier()->planRejected($this->plan);
 
             return;
         }
@@ -362,6 +372,26 @@ class GeneratePlanSteps implements ShouldQueue
                 $this->plan->latestRefinement?->update(['status' => 'applied']);
             }
         });
+
+        // Outside the transaction on purpose. Every queue connection is
+        // configured with after_commit => false, so a notification queued
+        // inside the block above could be picked up by a worker before the
+        // commit — and if a later step insert threw, the transaction would
+        // roll the "ready" status back while the notification stayed sent.
+        // There is no un-sending a push.
+        $this->isRefinement
+            ? $this->notifier()->refinementApplied($this->plan)
+            : $this->notifier()->planReady($this->plan);
+    }
+
+    /**
+     * Resolved lazily rather than injected: the job is serialized onto the
+     * queue, and a constructor-injected service would have to survive that
+     * round trip for no benefit.
+     */
+    private function notifier(): PlanNotifier
+    {
+        return app(PlanNotifier::class);
     }
 
     /**
@@ -602,6 +632,10 @@ class GeneratePlanSteps implements ShouldQueue
             $this->plan->update(['status' => 'ready']);
             $this->plan->latestRefinement?->update(['status' => 'failed']);
 
+            // Same reasoning as the content-rejection path in handle():
+            // "ready" here means "restored", not "succeeded".
+            $this->notifier()->refinementFailed($this->plan);
+
             return;
         }
 
@@ -609,5 +643,7 @@ class GeneratePlanSteps implements ShouldQueue
             'status' => 'failed',
             'error_message' => $exception->getMessage(),
         ]);
+
+        $this->notifier()->planFailed($this->plan);
     }
 }

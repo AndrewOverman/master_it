@@ -12,6 +12,7 @@ import {
 import { identifyPurchasesUser, resetPurchasesUser } from '../lib/purchases';
 import { identifyAnalyticsUser, resetAnalyticsUser } from '../lib/analytics';
 import { identifyErrorReportingUser, resetErrorReportingUser } from '../lib/errorReporting';
+import { clearPushToken, registerIfAlreadyPermitted } from '../lib/pushNotifications';
 
 interface AuthContextValue {
   // null while the initial SecureStore check is still pending
@@ -40,6 +41,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // entitlements, and that's just as true after a 401 as after a deliberate
 // log out.
 async function clearLocalSession(): Promise<void> {
+  // Before deleteToken(), not after: unregistering is an authenticated
+  // request, so clearing the bearer first would leave this device
+  // registered and the account still receiving notifications on a phone
+  // nobody is signed into. Best-effort — see clearPushToken().
+  await clearPushToken();
+
   await deleteToken();
   await deleteStoredUserId();
   await resetPurchasesUser();
@@ -82,6 +89,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         identifyAnalyticsUser(userId);
         identifyErrorReportingUser(userId);
         await identifyPurchasesUser(userId);
+
+        // Re-registers a device that already has permission, so a rotated
+        // token or a timezone change (someone who travelled) is picked up.
+        // Never prompts — see registerIfAlreadyPermitted().
+        registerIfAlreadyPermitted();
       } catch {
         // A failure to restore the RevenueCat identity must not cost the user
         // their session — the token is what authenticates them. The paywall
@@ -117,6 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // RevenueCat, and it failing (offline, misconfigured keys) must not turn
     // a successful login into a failed one.
     await identifyPurchasesUser(userId).catch(() => {});
+
+    // Binds this device to the account that just signed in. Same reasoning
+    // as above: not awaited into the sign-in result.
+    registerIfAlreadyPermitted();
   };
 
   const signOut = async () => {

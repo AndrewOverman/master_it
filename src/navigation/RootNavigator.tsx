@@ -14,7 +14,13 @@ import {
   type NativeStackHeaderProps,
 } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import * as Notifications from 'expo-notifications';
 import { useQueryClient } from '@tanstack/react-query';
+import {
+  handleNotificationAction,
+  routeForNotification,
+  type NotificationPayload,
+} from '../lib/pushNotifications';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
@@ -120,6 +126,52 @@ function extractResetParams(url: string | null): { token: string; email: string 
   );
 
   return params.token && params.email ? { token: params.token, email: params.email } : null;
+}
+
+/**
+ * Turns a notification's payload into a navigation target.
+ *
+ * Every route here lives inside a tab, so each navigate() has to name the
+ * tab as well as the screen — the same nesting the share-link effect uses.
+ * Unknown or malformed payloads land on Today rather than doing nothing:
+ * a tapped notification that appears to be ignored reads as a broken app.
+ */
+function navigateToNotification(
+  navigationRef: ReturnType<typeof useNavigationContainerRef>,
+  payload: NotificationPayload
+): void {
+  const navigate = navigationRef.navigate as any;
+
+  if (payload.screen === 'Settings') {
+    navigate('Main', { screen: 'Me', params: { screen: 'Settings' } });
+    return;
+  }
+
+  if (payload.screen === 'StepDetail' && payload.planId && payload.stepId) {
+    navigate('Main', {
+      screen: 'Today',
+      params: {
+        screen: 'StepDetail',
+        params: { planId: payload.planId, stepId: payload.stepId },
+      },
+    });
+    return;
+  }
+
+  if (payload.screen === 'PlanDetail' && payload.planId) {
+    navigate('Main', {
+      screen: 'Today',
+      params: { screen: 'PlanDetail', params: { planId: payload.planId } },
+    });
+    return;
+  }
+
+  if (payload.screen === 'NewPlan') {
+    navigate('Main', { screen: 'Today', params: { screen: 'NewPlan' } });
+    return;
+  }
+
+  navigate('Main', { screen: 'Today', params: { screen: 'Today' } });
 }
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -330,6 +382,7 @@ function RootNavigatorContent() {
   const [pendingResetParams, setPendingResetParams] = useState<{ token: string; email: string } | null>(
     null
   );
+  const [pendingNotification, setPendingNotification] = useState<NotificationPayload | null>(null);
 
   // Capture a share or reset-password link whether it opens the app cold
   // (getInitialURL) or the app is already running (the 'url' event) — either
@@ -382,6 +435,57 @@ function RootNavigatorContent() {
       cancelled = true;
     };
   }, [isAuthenticated, pendingShareToken, navigationRef]);
+
+  // Notification taps. Same record-now/navigate-when-ready shape as the
+  // deep-link effects, for the same reason: a cold start delivers the
+  // response before the navigator exists.
+  //
+  // getLastNotificationResponseAsync() covers the app being launched *by*
+  // the tap; the listener covers it already running. Action buttons
+  // ("Mark done", "Snooze") are consumed by the handler and never navigate
+  // — the whole point of them is not having to open the app.
+  useEffect(() => {
+    let cancelled = false;
+
+    const consume = (response: Notifications.NotificationResponse | null) => {
+      if (!response || cancelled) return;
+
+      handleNotificationAction(response).then((handled) => {
+        if (handled || cancelled) return;
+        const route = routeForNotification(response);
+        if (route) setPendingNotification(route);
+      });
+    };
+
+    Notifications.getLastNotificationResponseAsync().then(consume);
+    const subscription = Notifications.addNotificationResponseReceivedListener(consume);
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !pendingNotification) return;
+    const route = pendingNotification;
+
+    let cancelled = false;
+    const tryNavigate = () => {
+      if (cancelled) return;
+      if (navigationRef.isReady()) {
+        navigateToNotification(navigationRef, route);
+        setPendingNotification(null);
+      } else {
+        setTimeout(tryNavigate, 100);
+      }
+    };
+    tryNavigate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, pendingNotification, navigationRef]);
 
   // Mirror of the effect above for reset-password links, but gated on
   // isAuthenticated === false rather than true — whoever tapped this link is

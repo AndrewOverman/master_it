@@ -49,6 +49,18 @@ class UserResource extends JsonResource
             // Only present when it actually applies, so the client can't
             // accidentally show "you've hit your limit" to someone who hasn't.
             // Same string the 429 body uses — see User::generationLimitMessage().
+            // Nested rather than four flat notify_* keys, so the client can
+            // render the settings section by iterating instead of naming
+            // each switch — adding a category later is then a backend
+            // change plus a label, not a new field on the client type.
+            'notification_preferences' => [
+                'plan_updates' => (bool) $this->notify_plan_updates,
+                'reminders' => (bool) $this->notify_reminders,
+                'progress' => (bool) $this->notify_progress,
+                'account' => (bool) $this->notify_account,
+            ],
+            // Hour of the user's local day the daily nudge may go out.
+            'daily_nudge_hour' => (int) $this->daily_nudge_hour,
             'generation_limit_message' => $this->when(
                 ! $this->canGenerate(),
                 fn () => $this->generationLimitMessage()

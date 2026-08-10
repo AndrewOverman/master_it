@@ -60,6 +60,19 @@ return [
         'secret_api_key' => env('REVENUECAT_SECRET_API_KEY'),
     ],
 
+    'expo' => [
+        // Master switch for outbound push. Off unless explicitly enabled,
+        // so a dev or staging backend sharing a database can't fire real
+        // notifications at devices registered by another environment.
+        'enabled' => (bool) env('EXPO_PUSH_ENABLED', false),
+
+        // Optional Expo access token (expo.dev > Account settings > Access
+        // tokens). Without it Expo accepts pushes to any token from anyone
+        // who has it; with it, only requests bearing this token are
+        // honoured. Leave blank in dev, set it in production.
+        'access_token' => env('EXPO_ACCESS_TOKEN'),
+    ],
+
     'mobile' => [
         // Must match the `scheme` for whichever app.config.ts APP_VARIANT
         // built the app talking to this backend (development/staging/

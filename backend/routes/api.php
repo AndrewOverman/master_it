@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PlanController;
 use App\Http\Controllers\Api\PlanStepController;
+use App\Http\Controllers\Api\PushTokenController;
 use App\Http\Controllers\Api\RevenueCatWebhookController;
 use App\Http\Controllers\Api\SharedPlanController;
 use App\Http\Controllers\Api\SubscriptionController;
@@ -35,6 +36,13 @@ Route::prefix('v1')->group(function () {
         // client retries it on a backoff after a purchase.
         Route::post('user/subscription/refresh', [SubscriptionController::class, 'refresh'])
             ->middleware('throttle:subscription-refresh');
+        // Throttled because the app re-registers on every launch and after
+        // every permission change, so a restart loop on one device
+        // shouldn't be able to hammer this.
+        Route::post('push-tokens', [PushTokenController::class, 'store'])
+            ->middleware('throttle:push-token');
+        Route::delete('push-tokens', [PushTokenController::class, 'destroy']);
+
         Route::get('user/export', [UserController::class, 'export']);
         Route::delete('user', [UserController::class, 'destroy']);
 

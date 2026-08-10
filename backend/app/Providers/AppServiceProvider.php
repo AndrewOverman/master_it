@@ -61,6 +61,16 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(2)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Device registration is idempotent and genuinely repeats — the app
+        // re-registers on every launch, on sign-in, and whenever the
+        // notification permission changes — so this is loose enough not to
+        // reject normal use and tight enough to stop a crash-looping build
+        // from writing on every restart. Keyed by user, since the route is
+        // behind auth:sanctum and one household can share an IP.
+        RateLimiter::for('push-token', function (Request $request) {
+            return Limit::perMinute(20)->by($request->user()?->id ?: $request->ip());
+        });
+
         // Password::sendResetLink() already throttles re-sends to the same
         // email every 60s on its own — this is the outer guard against one
         // IP working through many different emails, so it's keyed by IP

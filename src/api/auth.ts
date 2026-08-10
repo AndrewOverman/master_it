@@ -25,7 +25,28 @@ export interface AuthUser {
   // Only sent when can_generate is false — the same sentence the API's 429
   // body uses, so the up-front notice and the rejection can't disagree.
   generation_limit_message?: string;
+  // Which notification categories this account has opted into. Optional for
+  // the same reason as the fields above — login/register return the bare
+  // user shape, not UserResource.
+  notification_preferences?: NotificationPreferences;
+  // Hour of the user's local day (0-23) the daily nudge may arrive.
+  daily_nudge_hour?: number;
 }
+
+/**
+ * Mirrors the backend's NotificationCategory enum. Coarse on purpose: one
+ * master switch would mean an unwanted nudge costs the user "your plan is
+ * ready" too, and a switch per notification type is a settings screen
+ * nobody reads.
+ */
+export interface NotificationPreferences {
+  plan_updates: boolean;
+  reminders: boolean;
+  progress: boolean;
+  account: boolean;
+}
+
+export type NotificationCategory = keyof NotificationPreferences;
 
 export interface AuthResponse {
   user: AuthUser;
@@ -92,11 +113,19 @@ export async function deleteAccount(payload: { password: string }): Promise<void
 
 // PATCH /api/v1/user
 // current_password is only required when password is included.
+// Notification settings ride on this endpoint rather than one of their own:
+// they're user-owned profile state, and the response is written straight
+// into the shared ['user'] cache either way.
 export async function updateProfile(payload: {
   name?: string;
   email?: string;
   current_password?: string;
   password?: string;
+  notify_plan_updates?: boolean;
+  notify_reminders?: boolean;
+  notify_progress?: boolean;
+  notify_account?: boolean;
+  daily_nudge_hour?: number;
 }): Promise<AuthUser> {
   const { data } = await apiClient.patch<AuthUser>('/api/v1/user', payload);
   return data;

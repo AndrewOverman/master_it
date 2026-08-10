@@ -1,12 +1,31 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking, Platform, ScrollView } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  AppState,
+  Linking,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Application from 'expo-application';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getCurrentUser } from '../api/auth';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  getCurrentUser,
+  updateProfile,
+  type AuthUser,
+  type NotificationCategory,
+  type NotificationPreferences,
+} from '../api/auth';
+import { getPermissionStatus, registerForPushNotifications } from '../lib/pushNotifications';
 import { useAuth } from '../context/AuthContext';
 import { DeleteAccountModal } from '../components/DeleteAccountModal';
+import { SettingsSwitch } from '../components/ui';
 import { useTheme, type ThemePreference } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -155,6 +174,9 @@ export function SettingsScreen() {
         ) : null}
       </View>
 
+      <Text style={[styles.sectionTitle, styles.laterSectionTitle]}>Notifications</Text>
+      <NotificationSettings styles={styles} colors={colors} />
+
       <Text style={[styles.sectionTitle, styles.laterSectionTitle]}>Appearance</Text>
       <View style={styles.themeRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
         {THEME_OPTIONS.map((option) => {
@@ -227,6 +249,224 @@ export function SettingsScreen() {
   );
 }
 
+// Iterated rather than written out four times, so adding a category on the
+// backend is a one-line change here. Order is deliberate: the transactional
+// one first, since it's the one people most want left on.
+const NOTIFICATION_CATEGORIES: { key: NotificationCategory; label: string; hint: string }[] = [
+  {
+    key: 'plan_updates',
+    label: 'Plan updates',
+    hint: 'When a plan finishes generating, or something goes wrong.',
+  },
+  {
+    key: 'reminders',
+    label: 'Reminders',
+    hint: "A daily nudge about steps you're aiming to finish.",
+  },
+  {
+    key: 'progress',
+    label: 'Progress',
+    hint: 'Milestones, streaks, and your weekly recap.',
+  },
+  {
+    key: 'account',
+    label: 'Account',
+    hint: 'Subscription, billing, and generation allowance.',
+  },
+];
+
+function formatHour(hour: number): string {
+  const period = hour < 12 ? 'AM' : 'PM';
+  const display = hour % 12 === 0 ? 12 : hour % 12;
+  return `${display}:00 ${period}`;
+}
+
+/**
+ * The notification preferences block.
+ *
+ * Two things are shown that a plain list of switches would get wrong: the
+ * real OS permission state (a switch that's "on" while the system is
+ * blocking every notification is a lie), and the reminder time, which only
+ * matters while reminders are actually on.
+ */
+function NotificationSettings({ styles, colors }: { styles: Styles; colors: ThemeColors }) {
+  const queryClient = useQueryClient();
+  const { data: user } = useQuery({ queryKey: ['user'], queryFn: getCurrentUser });
+  const [permission, setPermission] = useState<PermissionState | null>(null);
+  const [isEditingTime, setIsEditingTime] = useState(false);
+
+  // Re-checked whenever the app comes back to the foreground, because the
+  // most likely reason someone left was to change this exact setting in the
+  // OS — coming back to a stale "notifications are off" banner would be
+  // the app contradicting what they just did.
+  useEffect(() => {
+    let cancelled = false;
+
+    const check = () => {
+      getPermissionStatus().then((status) => {
+        if (!cancelled) setPermission(status);
+      });
+    };
+
+    check();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, []);
+
+  const mutation = useMutation({
+    mutationFn: updateProfile,
+    // Optimistic, because a switch that waits for a round trip before
+    // moving feels broken — and this one is toggled far from any spinner.
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ['user'] });
+      const previous = queryClient.getQueryData<AuthUser>(['user']);
+
+      if (previous) {
+        const preferences = { ...(previous.notification_preferences ?? EMPTY_PREFERENCES) };
+
+        for (const category of NOTIFICATION_CATEGORIES) {
+          const value = payload[`notify_${category.key}` as keyof typeof payload];
+          if (typeof value === 'boolean') preferences[category.key] = value;
+        }
+
+        queryClient.setQueryData<AuthUser>(['user'], {
+          ...previous,
+          notification_preferences: preferences,
+          daily_nudge_hour: payload.daily_nudge_hour ?? previous.daily_nudge_hour,
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_error, _payload, context) => {
+      if (context?.previous) queryClient.setQueryData(['user'], context.previous);
+    },
+    onSuccess: (updated) => queryClient.setQueryData(['user'], updated),
+  });
+
+  const preferences = user?.notification_preferences ?? EMPTY_PREFERENCES;
+  const nudgeHour = user?.daily_nudge_hour ?? 9;
+
+  const commitHour = (date: Date) => {
+    setIsEditingTime(false);
+    mutation.mutate({ daily_nudge_hour: date.getHours() });
+  };
+
+  return (
+    <View style={styles.card}>
+      {permission === 'denied' ? (
+        <TouchableOpacity
+          style={styles.permissionNotice}
+          onPress={() => Linking.openSettings()}
+          accessibilityRole="button"
+          accessibilityLabel="Open system settings to allow notifications"
+        >
+          <Ionicons name="notifications-off-outline" size={18} color={colors.destructive} />
+          <Text style={styles.permissionNoticeText}>
+            Notifications are turned off for Master It. Tap to allow them in Settings.
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {permission === 'undetermined' ? (
+        <TouchableOpacity
+          style={styles.permissionNotice}
+          onPress={() => registerForPushNotifications().then(() => getPermissionStatus().then(setPermission))}
+          accessibilityRole="button"
+          accessibilityLabel="Turn on notifications"
+        >
+          <Ionicons name="notifications-outline" size={18} color={colors.accent} />
+          <Text style={styles.permissionNoticeText}>
+            Turn on notifications to get reminders about your steps.
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Simulators and Expo Go can't receive push at all. Saying so beats
+          leaving someone toggling switches that will never do anything. */}
+      {permission === 'unsupported' ? (
+        <View style={styles.permissionNotice}>
+          <Ionicons name="phone-portrait-outline" size={18} color={colors.textMuted} />
+          <Text style={styles.permissionNoticeText}>
+            Notifications aren't available on this device.
+          </Text>
+        </View>
+      ) : null}
+
+      {NOTIFICATION_CATEGORIES.map((category, index) => (
+        <View key={category.key}>
+          {index > 0 ? <View style={styles.divider} /> : null}
+          <SettingsSwitch
+            label={category.label}
+            hint={category.hint}
+            value={preferences[category.key]}
+            disabled={!user}
+            onValueChange={(value) =>
+              mutation.mutate({ [`notify_${category.key}`]: value })
+            }
+          />
+          {/* Nested under Reminders rather than given its own section: it
+              configures that switch and is meaningless while it's off. */}
+          {category.key === 'reminders' && preferences.reminders ? (
+            <TouchableOpacity
+              style={styles.cardAction}
+              onPress={() => setIsEditingTime((editing) => !editing)}
+              accessibilityRole="button"
+              accessibilityLabel={`Reminder time, currently ${formatHour(nudgeHour)}`}
+            >
+              <Text style={styles.cardActionText}>Remind me at {formatHour(nudgeHour)}</Text>
+              <Ionicons name="time-outline" size={15} color={colors.accent} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ))}
+
+      {isEditingTime ? (
+        <View style={styles.timePickerRow}>
+          <DateTimePicker
+            value={new Date(2026, 0, 1, nudgeHour, 0)}
+            mode="time"
+            // Whatever minute is picked is discarded — the backend schedules
+            // on the hour, since it evaluates users hourly. The picker is
+            // left at its default granularity because forcing 60-minute
+            // steps reads as broken on Android, where the control shows a
+            // minute field regardless.
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event: any, selected?: Date) => {
+              // Android's picker is a one-shot dialog that reports its own
+              // dismissal; iOS is an inline spinner that keeps emitting as
+              // it scrolls. Same split as StepDetailScreen's date picker.
+              if (Platform.OS === 'android') {
+                setIsEditingTime(false);
+                if (event.type === 'set' && selected) commitHour(selected);
+              } else if (selected) {
+                commitHour(selected);
+              }
+            }}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const EMPTY_PREFERENCES: NotificationPreferences = {
+  plan_updates: true,
+  reminders: true,
+  progress: true,
+  account: true,
+};
+
+type Styles = ReturnType<typeof createStyles>;
+
+type PermissionState = Awaited<ReturnType<typeof getPermissionStatus>>;
+
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -267,6 +507,23 @@ const createStyles = (colors: ThemeColors) =>
       minHeight: 44,
     },
     cardActionText: { fontSize: typography.label.fontSize, fontWeight: '600', color: colors.accent },
+    divider: { height: 1, backgroundColor: colors.borderMuted, marginVertical: spacing.xxs },
+    permissionNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingBottom: spacing.sm,
+      marginBottom: spacing.xs,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderMuted,
+    },
+    permissionNoticeText: {
+      flex: 1,
+      fontSize: typography.small.fontSize,
+      lineHeight: typography.small.lineHeight,
+      color: colors.textMuted,
+    },
+    timePickerRow: { alignItems: 'center', marginTop: spacing.xs },
     themeRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
     themeOption: {
       flex: 1,

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { CreatePlanFab } from '../components/CreatePlanFab';
 import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
 import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import { formatDueDate } from '../utils/dueDate';
+import { setBadgeCount } from '../lib/pushNotifications';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
@@ -31,6 +32,20 @@ function isActive(plan: Plan): boolean {
 
 function nextStepOf(plan: Plan) {
   return [...plan.steps].sort((a, b) => a.order - b.order).find((step) => !step.completed_at);
+}
+
+// Local midnight, matching formatDueDate()'s whole-day comparisons — a
+// step due today must not start counting as overdue at 00:00 UTC.
+function startOfToday(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+
+function dueOnOrBefore(isoDate: string, cutoff: number): boolean {
+  // Parsed as local, not `new Date('2026-08-14')`, which is treated as UTC
+  // and lands on the previous day west of Greenwich.
+  const due = new Date(`${isoDate}T00:00:00`).getTime();
+  return !Number.isNaN(due) && due <= cutoff;
 }
 
 /**
@@ -63,6 +78,22 @@ export function TodayScreen({ navigation }: any) {
   const openNewPlan = () => navigation.navigate('NewPlan');
   const activePlans = (plans ?? []).filter(isActive);
   const hasNoPlans = (plans?.length ?? 0) === 0;
+
+  // The badge counts what this screen exists to answer — steps due today or
+  // already past due. Kept in sync from here rather than from the
+  // notification itself, because the count changes whenever a step is
+  // checked off, which happens far more often than a notification arrives.
+  useEffect(() => {
+    if (!plans) return;
+
+    const today = startOfToday();
+    const outstanding = plans
+      .filter(isActive)
+      .flatMap((plan) => plan.steps)
+      .filter((step) => !step.completed_at && step.due_date && dueOnOrBefore(step.due_date, today));
+
+    setBadgeCount(outstanding.length);
+  }, [plans]);
 
   if (isLoading) {
     return (

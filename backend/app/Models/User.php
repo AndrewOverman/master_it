@@ -14,12 +14,44 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable([
+    'name',
+    'email',
+    'password',
+    // Notification settings are user-owned and edited through the same
+    // PATCH /user endpoint as the profile fields, so they belong here.
+    // Nothing else about the account is mass-assignable — subscription and
+    // generation columns are still written only via forceFill/explicit
+    // assignment, because those are the app's word, not the user's.
+    'notify_plan_updates',
+    'notify_reminders',
+    'notify_progress',
+    'notify_account',
+    'daily_nudge_hour',
+])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * Mirrors the column defaults in the notification-preferences
+     * migration.
+     *
+     * Needed because a model that was just created holds only the
+     * attributes that were explicitly written — a column default applied
+     * by the database isn't read back. Without this, a user who registers
+     * and is notified in the same request has every preference read as
+     * null, which is falsy, and would silently receive nothing.
+     */
+    protected $attributes = [
+        'notify_plan_updates' => true,
+        'notify_reminders' => true,
+        'notify_progress' => true,
+        'notify_account' => true,
+        'daily_nudge_hour' => 9,
+    ];
 
     /**
      * Overridden only to swap in the queued notification — sending is an HTTP
@@ -44,12 +76,42 @@ class User extends Authenticatable implements MustVerifyEmail
             'subscription_expires_at' => 'datetime',
             'generation_period_started_at' => 'datetime',
             'free_generation_claimed_at' => 'datetime',
+            'notify_plan_updates' => 'boolean',
+            'notify_reminders' => 'boolean',
+            'notify_progress' => 'boolean',
+            'notify_account' => 'boolean',
         ];
     }
 
     public function plans(): HasMany
     {
         return $this->hasMany(Plan::class);
+    }
+
+    public function pushTokens(): HasMany
+    {
+        return $this->hasMany(PushToken::class);
+    }
+
+    public function notificationDeliveries(): HasMany
+    {
+        return $this->hasMany(NotificationDelivery::class);
+    }
+
+    /**
+     * The timezone to interpret this user's "day" in — for the nudge hour,
+     * for quiet hours, and for deciding which steps count as due today.
+     *
+     * Read off the most recently registered device rather than stored on
+     * the account, because the device is the only thing that actually
+     * knows. A user with phones in two zones gets whichever they used
+     * last, which is the better guess than either a stale column or UTC.
+     */
+    public function timezone(): string
+    {
+        return $this->pushTokens()
+            ->orderByDesc('last_seen_at')
+            ->value('timezone') ?? 'UTC';
     }
 
     public function deviceAttestations(): HasMany

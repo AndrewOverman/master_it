@@ -78,7 +78,19 @@ export default (_context: ConfigContext): ExpoConfig => ({
     // reads them from the environment. Without them the build still succeeds
     // and release stack traces are simply unsymbolicated.
     '@sentry/react-native',
-    // PostHog reads locale to bucket events by region.
+    // PostHog reads locale to bucket events by region. Also how the push
+    // registration reports the device's IANA timezone — see
+    // src/lib/pushNotifications.ts.
     'expo-localization',
+    [
+      'expo-notifications',
+      {
+        // Deliberately no `icon`: Android renders the notification icon as
+        // a silhouette, so handing it the full-colour app icon produces a
+        // white blob. Until a dedicated monochrome asset exists, the
+        // system default is the better-looking option.
+        color: lightColors.accent,
+      },
+    ],
   ],
 });

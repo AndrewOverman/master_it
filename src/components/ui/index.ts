@@ -8,3 +8,4 @@ export { EmptyState } from './EmptyState';
 export { Logo } from './Logo';
 export { OfflineNotice } from './OfflineNotice';
 export { ProgressBar } from './ProgressBar';
+export { SettingsSwitch } from './SettingsSwitch';

@@ -26,6 +26,17 @@ class UserController extends Controller
             'email' => ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'current_password' => ['required_with:password', 'string'],
             'password' => ['sometimes', 'required', 'string', Password::min(8)->mixedCase()->numbers()],
+
+            // Notification settings ride on this endpoint rather than one of
+            // their own: they're user-owned profile state, and the client
+            // already writes this response straight back into its shared
+            // user cache, so a separate endpoint would need its own cache
+            // plumbing to achieve nothing extra.
+            'notify_plan_updates' => ['sometimes', 'boolean'],
+            'notify_reminders' => ['sometimes', 'boolean'],
+            'notify_progress' => ['sometimes', 'boolean'],
+            'notify_account' => ['sometimes', 'boolean'],
+            'daily_nudge_hour' => ['sometimes', 'integer', 'between:0,23'],
         ]);
 
         if (isset($validated['password']) && ! Hash::check($validated['current_password'], $user->password)) {

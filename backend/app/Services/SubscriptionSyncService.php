@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\NotificationType;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -17,6 +18,8 @@ use Illuminate\Support\Carbon;
  */
 class SubscriptionSyncService
 {
+    public function __construct(private PushNotificationService $push) {}
+
     /**
      * Checked in this order — the first match wins, so a user somehow
      * holding both (mid-upgrade, or a grandfathered plan) lands on the
@@ -47,6 +50,14 @@ class SubscriptionSyncService
     ): User {
         $tier = $this->tierFor($entitlementIds);
 
+        // Captured before the write so the notification below can fire on
+        // the *transition* into a billing failure rather than on every
+        // payload that mentions one. RevenueCat retries any webhook it
+        // doesn't get a 2xx for and re-delivers the same event, so an
+        // unconditional send would notify the same user repeatedly about
+        // one failed charge.
+        $previousStatus = $user->getOriginal('subscription_status');
+
         // forceFill(), not update() — these fields are deliberately absent
         // from User's #[Fillable] list so a user can never set their own
         // tier via PATCH /user. Only trusted server-side callers reach here.
@@ -58,7 +69,32 @@ class SubscriptionSyncService
             'revenuecat_app_user_id' => $appUserId ?? $user->revenuecat_app_user_id,
         ])->save();
 
+        $this->notifyIfPaymentJustFailed($user, $previousStatus);
+
         return $user;
+    }
+
+    /**
+     * A failed charge is time-sensitive and entirely fixable — but only by
+     * the user, and only if they know. This is the one subscription event
+     * worth interrupting someone for.
+     */
+    private function notifyIfPaymentJustFailed(User $user, ?string $previousStatus): void
+    {
+        if ($user->subscription_status !== 'past_due' || $previousStatus === 'past_due') {
+            return;
+        }
+
+        $this->push->send(
+            $user,
+            NotificationType::PaymentIssue,
+            'There was a problem with your payment',
+            'Update your billing details to keep your subscription active.',
+            data: ['type' => NotificationType::PaymentIssue->value, 'screen' => 'Settings'],
+            // Per lapse, not per user: someone whose card fails again months
+            // later needs telling again.
+            dedupeKey: 'past_due:'.now()->toDateString(),
+        );
     }
 
     /**
