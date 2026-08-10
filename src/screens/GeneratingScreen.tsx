@@ -8,6 +8,7 @@ import type { ThemeColors } from '../theme/colors';
 import { Button } from '../components/ui';
 import { typography } from '../theme/typography';
 import { spacing } from '../theme/spacing';
+import { track } from '../lib/analytics';
 
 // Generation has no real backend progress signal (GeneratePlanSteps flips
 // status once, start to finish), so these stages are a timed simulation
@@ -88,6 +89,36 @@ export function GeneratingScreen({ route, navigation }: any) {
     return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Wall-clock from arriving on this screen to the plan resolving. This is the
+  // number SLOW_AFTER_MS was guessed at without — once there's a real p95 in
+  // the data, the "taking longer than usual" threshold can be set from it.
+  const startedAt = useRef(Date.now());
+  // Navigation away happens inside an animation callback, so this effect can
+  // run again after it has already fired. Without the latch, a re-render
+  // before the screen unmounts double-counts the outcome.
+  const outcomeTracked = useRef(false);
+
+  useEffect(() => {
+    if (!plan || outcomeTracked.current) return;
+
+    if (plan.status === 'ready') {
+      outcomeTracked.current = true;
+      track({
+        name: 'plan_generation_completed',
+        properties: {
+          step_count: plan.steps?.length ?? 0,
+          waited_ms: Date.now() - startedAt.current,
+        },
+      });
+    } else if (plan.status === 'failed') {
+      outcomeTracked.current = true;
+      track({ name: 'plan_generation_failed' });
+    } else if (plan.status === 'rejected') {
+      outcomeTracked.current = true;
+      track({ name: 'plan_generation_rejected' });
+    }
+  }, [plan]);
 
   useEffect(() => {
     if (!plan) return;

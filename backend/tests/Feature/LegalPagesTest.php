@@ -67,6 +67,19 @@ class LegalPagesTest extends TestCase
             ->assertSee('Anthropic')
             ->assertSee('RevenueCat')
             ->assertSee('Resend')
-            ->assertSee('YouTube Data API');
+            ->assertSee('YouTube Data API')
+            ->assertSee('PostHog')
+            ->assertSee('Sentry');
+    }
+
+    /**
+     * The commitment the analytics implementation is built around: events
+     * carry categorical properties only, never the user's goal or notes. If
+     * that ever stops being true in src/lib/analytics.ts, this sentence has to
+     * come out of the policy in the same change.
+     */
+    public function test_the_privacy_policy_promises_no_user_text_in_analytics(): void
+    {
+        $this->get('/privacy')->assertSee('No text you write is ever included in an event.');
     }
 }

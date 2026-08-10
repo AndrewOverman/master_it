@@ -14,6 +14,8 @@ import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import { typography } from '../theme/typography';
 import { radius } from '../theme/radius';
 import { spacing } from '../theme/spacing';
+import { track } from '../lib/analytics';
+import { reportError } from '../lib/errorReporting';
 
 type SkillLevel = CreatePlanRequest['skill_level'];
 type TimeCommitment = CreatePlanRequest['time_commitment'];
@@ -147,10 +149,16 @@ export function NewPlanScreen({ navigation }: any) {
         // The allowance clearly changed under us, so refresh what the form
         // is showing along with it.
         queryClient.invalidateQueries({ queryKey: ['user'] });
+        // The moment intent meets the wall. Paired with paywall_viewed, this
+        // is what separates "hit the limit and gave up" from "hit the limit
+        // and went to look at plans" — the two are indistinguishable from
+        // subscription numbers alone.
+        track({ name: 'generation_limit_hit', properties: { tier: user?.subscription_tier ?? 'free' } });
         setLimitMessage(message);
         return;
       }
 
+      reportError(error, { where: 'newPlan.create', status: error?.response?.status });
       Alert.alert('Something went wrong', message);
     },
   });
@@ -171,6 +179,21 @@ export function NewPlanScreen({ navigation }: any) {
     if (durationProblem) return;
 
     if (!requireOnline('generate a new plan')) return;
+
+    // The goal text itself is deliberately absent — only the categorical
+    // choices around it, which are what the funnel needs.
+    track({
+      name: 'plan_generation_started',
+      properties: {
+        // 'unspecified' rather than dropping the property: the same word
+        // GeneratePlanSteps::buildPrompt() uses for a blank field, and a
+        // missing property would silently vanish from a breakdown instead of
+        // showing up as its own bucket.
+        skill_level: skillLevel ?? 'unspecified',
+        time_commitment: timeCommitment ?? 'unspecified',
+        target_days: targetDays > 0 ? targetDays : null,
+      },
+    });
 
     mutation.mutate({
       prompt: prompt.trim(),
@@ -203,7 +226,7 @@ export function NewPlanScreen({ navigation }: any) {
           {/* Previously this notice ended here — it told the user to
               subscribe and gave them no way to do it. */}
           <TouchableOpacity
-            onPress={() => navigation.navigate('Paywall')}
+            onPress={() => navigation.navigate('Paywall', { source: 'new_plan_banner' })}
             style={styles.limitNoticeAction}
             accessibilityRole="button"
             accessibilityLabel="See subscription plans"
@@ -392,7 +415,7 @@ export function NewPlanScreen({ navigation }: any) {
           // modal on top of this one, and dismissing the paywall would
           // reveal the limit modal again behind it.
           setLimitMessage(null);
-          navigation.navigate('Paywall');
+          navigation.navigate('Paywall', { source: 'generation_limit' });
         }}
         onDismiss={() => setLimitMessage(null)}
       />

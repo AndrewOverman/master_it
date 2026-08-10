@@ -132,7 +132,7 @@ export function SettingsScreen() {
 
         <TouchableOpacity
           style={styles.cardAction}
-          onPress={() => navigation.navigate('Paywall')}
+          onPress={() => navigation.navigate('Paywall', { source: 'settings' })}
           accessibilityRole="button"
           accessibilityLabel={isPaid ? 'Change plan' : 'See subscription plans'}
         >

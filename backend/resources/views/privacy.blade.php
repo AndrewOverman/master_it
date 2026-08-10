@@ -53,10 +53,33 @@
         internal identifiers such as your account and plan ID, and can include
         step titles, but not the text of your goal.
     </p>
+    <h3>Product analytics and error reports</h3>
     <p>
-        We do not use advertising identifiers, we do not track you across other
-        apps or websites, and the app contains no third-party analytics or
-        advertising SDKs.
+        The app records a fixed, named list of events so we can tell whether it
+        actually works &mdash; whether plans finish generating, whether people
+        complete them, and whether the subscription screen makes sense. Each
+        event carries your account identifier and categorical details only: which
+        screen you came from, your subscription tier, a step count, how long a
+        plan took to generate.
+    </p>
+    <p>
+        <strong>
+            No text you write is ever included in an event. Not your goal, not
+            your revision notes, not your plan titles.
+        </strong>
+        There is no automatic capture of taps or screens, and no session
+        recording &mdash; nothing is collected that is not on that fixed list.
+    </p>
+    <p>
+        When the app hits an error, we send a crash report containing the error
+        and where in the code it happened, along with your account identifier so
+        we can tell whether a problem affects one person or everyone. Crash
+        reports are configured not to include request contents or your IP
+        address.
+    </p>
+    <p>
+        We do not use advertising identifiers, and we do not track you across
+        other apps or websites.
     </p>
 
     <h2>How we use it</h2>
@@ -110,6 +133,20 @@
                 <td>Resend</td>
                 <td>Your email address and the contents of the message.</td>
                 <td>Sending verification and password-reset email</td>
+            </tr>
+            <tr>
+                <td>PostHog</td>
+                <td>
+                    Your account identifier, your subscription tier, and the named
+                    events described above. <strong>Not</strong> your name, email
+                    address, or anything you have written.
+                </td>
+                <td>Understanding whether the app works and where people get stuck</td>
+            </tr>
+            <tr>
+                <td>Sentry</td>
+                <td>Error details and your account identifier, when something goes wrong.</td>
+                <td>Finding and fixing crashes and server errors</td>
             </tr>
             <tr>
                 <td>Supabase, Railway</td>

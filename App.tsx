@@ -10,9 +10,15 @@ import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { setupOnlineManager } from './src/lib/offline';
 import { configurePurchases } from './src/lib/purchases';
+import { configureAnalytics } from './src/lib/analytics';
+import { configureErrorReporting } from './src/lib/errorReporting';
 import { CACHE_BUSTER, MAX_CACHE_AGE, shouldDehydrateQuery } from './src/lib/queryPersistence';
 
 setupOnlineManager();
+
+// First, so an error thrown by anything below is itself reported.
+configureErrorReporting();
+configureAnalytics();
 
 // Before any component mounts, because AuthContext's session-restore effect
 // identifies the user to RevenueCat and every SDK call throws until

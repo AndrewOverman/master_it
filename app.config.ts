@@ -67,5 +67,18 @@ export default (_context: ConfigContext): ExpoConfig => ({
         backgroundColor: lightColors.background,
       },
     ],
+    // Wires the native crash handlers and, at build time, uploads the source
+    // maps that turn a minified release stack trace into readable frames.
+    // Without the plugin the JS-side SDK still reports, but native crashes —
+    // the ones that take the whole app down — go unseen.
+    //
+    // Left unconfigured here on purpose: the upload needs SENTRY_ORG,
+    // SENTRY_PROJECT and SENTRY_AUTH_TOKEN, and the token is a credential that
+    // must not sit in the repo. Set all three as EAS build secrets; the plugin
+    // reads them from the environment. Without them the build still succeeds
+    // and release stack traces are simply unsymbolicated.
+    '@sentry/react-native',
+    // PostHog reads locale to bucket events by region.
+    'expo-localization',
   ],
 });

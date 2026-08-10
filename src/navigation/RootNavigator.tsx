@@ -36,6 +36,7 @@ import { AuthProvider, useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useFeaturedOfflineSampleSync } from '../hooks/useFeaturedOfflineSample';
 import type { ThemeColors } from '../theme/colors';
+import type { PaywallSource } from '../lib/analytics';
 import { Spinner } from '../components/ui';
 import { typography } from '../theme/typography';
 import { spacing } from '../theme/spacing';
@@ -88,7 +89,7 @@ export type RootStackParamList = {
   // each stack (or bouncing the user to the Me tab mid-flow, losing a
   // half-filled form) are both worse. As a modal it dismisses back to
   // wherever it was opened from.
-  Paywall: undefined;
+  Paywall: { source: PaywallSource } | undefined;
 };
 
 // Pulls the token out of a masterit://plans/shared/{token} deep link (and

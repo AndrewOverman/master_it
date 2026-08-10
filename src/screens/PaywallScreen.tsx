@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -13,6 +13,8 @@ import {
   type PurchasesPackage,
 } from '../lib/purchases';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../lib/legal';
+import { track, flushAnalytics, type PaywallSource } from '../lib/analytics';
+import { reportError } from '../lib/errorReporting';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { Button, Spinner, EmptyState } from '../components/ui';
@@ -33,13 +35,26 @@ function tierIdForPackage(pkg: PurchasesPackage, tierIds: string[]): string | nu
   );
 }
 
-export function PaywallScreen() {
+export function PaywallScreen({ route }: any) {
   const navigation = useNavigation<any>();
   const queryClient = useQueryClient();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [pendingPackage, setPendingPackage] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+
+  // Every caller passes where it opened from. Defaulted rather than required
+  // so a future entry point that forgets can't crash the paywall — it just
+  // lands in a bucket that's obviously wrong in the funnel, which is the
+  // failure mode you want.
+  const source: PaywallSource = route?.params?.source ?? 'settings';
+
+  // Fires once per opening, not per render, and before the packages resolve —
+  // a paywall that failed to load its offering is still a paywall the user
+  // reached, and dropping those would quietly inflate the conversion rate.
+  useEffect(() => {
+    track({ name: 'paywall_viewed', properties: { source } });
+  }, [source]);
 
   const { data: tiers } = useQuery({ queryKey: ['subscriptionTiers'], queryFn: getSubscriptionTiers });
 
@@ -72,13 +87,28 @@ export function PaywallScreen() {
   };
 
   const handlePurchase = async (pkg: PurchasesPackage) => {
+    const tier = tierIdForPackage(pkg, tierIds);
     setPendingPackage(pkg.identifier);
+    track({ name: 'paywall_purchase_started', properties: { tier } });
+    // Control is about to pass to the store sheet, where the OS can freeze or
+    // kill us. Losing the buffered events at the most valuable step of the
+    // funnel is worth one extra request to avoid.
+    await flushAnalytics();
+
     try {
       await purchaseSubscription(pkg);
+      track({ name: 'paywall_purchase_completed', properties: { tier } });
       await syncAndClose();
     } catch (error) {
-      // Backing out of the store sheet is a normal outcome, not a failure.
-      if (error instanceof PurchaseCancelledError) return;
+      // Backing out of the store sheet is a normal outcome, not a failure —
+      // it's tracked because a high cancel rate at a specific tier is a
+      // pricing signal, but it is never reported as an error.
+      if (error instanceof PurchaseCancelledError) {
+        track({ name: 'paywall_purchase_cancelled', properties: { tier } });
+        return;
+      }
+      track({ name: 'paywall_purchase_failed', properties: { tier } });
+      reportError(error, { where: 'paywall.purchase', tier });
       Alert.alert(
         'Purchase failed',
         'Your card was not charged. Please try again, or restore a previous purchase.'
@@ -93,11 +123,14 @@ export function PaywallScreen() {
     try {
       const restored = await restoreSubscription();
       if (!restored) {
+        track({ name: 'paywall_restore_found_nothing' });
         Alert.alert('Nothing to restore', 'No previous purchase was found for this store account.');
         return;
       }
+      track({ name: 'paywall_restore_succeeded' });
       await syncAndClose();
-    } catch {
+    } catch (error) {
+      reportError(error, { where: 'paywall.restore' });
       Alert.alert('Could not restore', 'Please check your connection and try again.');
     } finally {
       setRestoring(false);

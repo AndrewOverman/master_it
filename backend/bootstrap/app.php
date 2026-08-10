@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Middleware\EnsureEmailIsVerified;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -25,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Same name, JSON body with a `code` the client can branch on —
         // see App\Http\Middleware\EnsureEmailIsVerified.
         $middleware->alias([
-            'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
+            'verified' => EnsureEmailIsVerified::class,
         ]);
 
         // Railway (and most PaaS hosts) terminate TLS at a reverse proxy in
@@ -35,6 +37,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Reports to Sentry when SENTRY_LARAVEL_DSN is set, and does nothing
+        // when it isn't — local and CI runs stay offline. This is the only
+        // place server-side failures become visible without opening Railway's
+        // log viewer: a generation job throwing, the queue worker dying, a
+        // webhook 500ing. All of those are currently silent.
+        Integration::handles($exceptions);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );

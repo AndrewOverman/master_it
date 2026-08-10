@@ -236,7 +236,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
           // Dismiss before navigating, or the paywall stacks on top of this
           // modal and closing it reveals the limit modal again behind.
           dismissRefineLimitModal();
-          navigation.navigate('Paywall');
+          navigation.navigate('Paywall', { source: 'refine_limit' });
         }}
         onDismiss={dismissRefineLimitModal}
       />

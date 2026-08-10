@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-
 import { typography } from '../theme/typography';
 import { radius } from '../theme/radius';
 import { spacing } from '../theme/spacing';
+import { reportError } from '../lib/errorReporting';
 
 interface Props {
   children: ReactNode;
@@ -46,9 +47,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
-    // No crash-reporting service wired up yet — at minimum this keeps the
-    // error visible in Metro/device logs instead of vanishing silently.
-    console.error('Uncaught error in app tree:', error, info.componentStack);
+    // This boundary is the last thing between an error and a blank screen, so
+    // anything reaching it has already cost the user their session — it's the
+    // highest-signal report the app can send. reportError falls back to the
+    // console when Sentry isn't configured, which is what dev and staging get.
+    reportError(error, { componentStack: info.componentStack });
   }
 
   private handleRetry = () => {

@@ -10,6 +10,8 @@ import {
   deleteStoredUserId,
 } from '../utils/tokenStorage';
 import { identifyPurchasesUser, resetPurchasesUser } from '../lib/purchases';
+import { identifyAnalyticsUser, resetAnalyticsUser } from '../lib/analytics';
+import { identifyErrorReportingUser, resetErrorReportingUser } from '../lib/errorReporting';
 
 interface AuthContextValue {
   // null while the initial SecureStore check is still pending
@@ -41,6 +43,11 @@ async function clearLocalSession(): Promise<void> {
   await deleteToken();
   await deleteStoredUserId();
   await resetPurchasesUser();
+  // Same reasoning as the RevenueCat reset above, applied to the other two
+  // identities: whoever signs in next on this device must not inherit the
+  // previous account's events or have their crashes attributed to them.
+  resetAnalyticsUser();
+  resetErrorReportingUser();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -72,6 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (cancelled) return;
 
+        identifyAnalyticsUser(userId);
+        identifyErrorReportingUser(userId);
         await identifyPurchasesUser(userId);
       } catch {
         // A failure to restore the RevenueCat identity must not cost the user
@@ -102,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setStoredUserId(userId);
     setSessionExpired(false);
     setIsAuthenticated(true);
+    identifyAnalyticsUser(userId);
+    identifyErrorReportingUser(userId);
     // After the session is live, not before: identifying is a network call to
     // RevenueCat, and it failing (offline, misconfigured keys) must not turn
     // a successful login into a failed one.
