@@ -59,13 +59,41 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function hasActiveSubscription(): bool
     {
-        return $this->subscription_expires_at !== null
-            && $this->subscription_expires_at->isFuture();
+        if ($this->subscription_tier === null || $this->subscription_tier === 'free') {
+            return false;
+        }
+
+        // A null expiry on a paid tier is a lifetime / non-expiring
+        // entitlement, not one that lapsed at an unknown time —
+        // RevenueCatService reports those with expires_at = null by design,
+        // and reading null as "expired" would lock out exactly the people
+        // who paid the most.
+        return $this->subscription_expires_at === null
+            || $this->subscription_expires_at->isFuture();
+    }
+
+    /**
+     * The tier whose allowance actually applies right now.
+     *
+     * Deliberately distinct from the `subscription_tier` column, which
+     * records what the store last told us the user held. A paid tier whose
+     * expiry has passed stays in that column until something clears it, and
+     * nothing is guaranteed to: a webhook can be missed, retried past
+     * exhaustion, or rejected while the endpoint is down, and the refresh
+     * endpoint only runs when the user opens the paywall — which someone
+     * who has already churned has no reason to do.
+     *
+     * So access is keyed off this, never off the raw column. Everything that
+     * grants or counts generations goes through it.
+     */
+    public function effectiveTier(): string
+    {
+        return $this->hasActiveSubscription() ? $this->subscription_tier : 'free';
     }
 
     public function monthlyGenerationLimit(): int
     {
-        return config("subscriptions.tiers.{$this->subscription_tier}.monthly_generations", 0);
+        return config("subscriptions.tiers.{$this->effectiveTier()}.monthly_generations", 0);
     }
 
     /**
@@ -92,8 +120,10 @@ class User extends Authenticatable implements MustVerifyEmail
 
         // The one-time free generation is a free-tier concept only — a
         // subscriber who has exhausted their monthly allowance doesn't fall
-        // back to it just because they never happened to use it.
-        return $this->subscription_tier === 'free' && $this->free_generation_claimed_at === null;
+        // back to it just because they never happened to use it. A lapsed
+        // subscriber is on the free tier again, so they do reach it, if they
+        // never claimed it while free the first time.
+        return $this->effectiveTier() === 'free' && $this->free_generation_claimed_at === null;
     }
 
     /**
@@ -110,7 +140,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
         $remaining = max(0, $this->monthlyGenerationLimit() - $this->plans_generated_count);
 
-        if ($remaining === 0 && $this->subscription_tier === 'free' && $this->free_generation_claimed_at === null) {
+        if ($remaining === 0 && $this->effectiveTier() === 'free' && $this->free_generation_claimed_at === null) {
             return 1;
         }
 
@@ -124,16 +154,26 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function generationLimitMessage(): string
     {
-        return $this->hasActiveSubscription()
-            ? "You've reached your monthly limit of {$this->monthlyGenerationLimit()} generated plans."
-            : "You've used your free plan generation. Subscribe to generate more.";
+        if ($this->hasActiveSubscription()) {
+            return "You've reached your monthly limit of {$this->monthlyGenerationLimit()} generated plans.";
+        }
+
+        // Someone holding a lapsed paid tier has been paying us. Telling them
+        // they've "used their free plan generation" reads as the app having
+        // lost their subscription, which is the last thing to say to a
+        // churned subscriber you'd like back.
+        if ($this->subscription_tier !== null && $this->subscription_tier !== 'free') {
+            return 'Your subscription has expired. Resubscribe to generate more plans.';
+        }
+
+        return "You've used your free plan generation. Subscribe to generate more.";
     }
 
     public function recordGeneration(): void
     {
         $this->resetGenerationPeriodIfElapsed();
 
-        if ($this->plans_generated_count >= $this->monthlyGenerationLimit() && $this->subscription_tier === 'free') {
+        if ($this->plans_generated_count >= $this->monthlyGenerationLimit() && $this->effectiveTier() === 'free') {
             $this->free_generation_claimed_at = Carbon::now();
         }
 

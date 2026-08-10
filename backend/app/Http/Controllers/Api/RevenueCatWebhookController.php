@@ -71,11 +71,50 @@ class RevenueCatWebhookController extends Controller
         $this->sync->apply(
             user: $user,
             entitlementIds: $entitlementIds,
-            expiresAt: $expirationMs ? Carbon::createFromTimestampMs($expirationMs) : null,
+            expiresAt: $this->expiryFor($user, $tier, $expirationMs),
             store: $event['store'] ?? null,
             status: $this->statusFor($type, $tier !== 'free'),
             appUserId: $event['app_user_id'] ?? null,
         );
+    }
+
+    /**
+     * When the payload grants a paid tier but carries no expiry, keep the one
+     * already stored instead of clearing it.
+     *
+     * A null expiry on a paid tier means "never expires" downstream (see
+     * User::hasActiveSubscription()), so writing null on the strength of a
+     * *missing* field would hand out permanent access — the same leak as
+     * trusting a stale tier, arrived at from the other direction. This is the
+     * unverified path: it maps whatever payload showed up. Establishing a
+     * genuinely non-expiring entitlement is left to the refresh endpoint,
+     * which reads each entitlement's expires_date from RevenueCat directly.
+     *
+     * An event that resolves to the free tier still clears the expiry — there
+     * the null is meaningful rather than absent.
+     */
+    private function expiryFor(User $user, string $tier, mixed $expirationMs): ?Carbon
+    {
+        if ($expirationMs) {
+            return Carbon::createFromTimestampMs($expirationMs);
+        }
+
+        if ($tier === 'free') {
+            return null;
+        }
+
+        // Nothing to fall back to: the account has never held a dated
+        // subscription, so this grant would be indefinite. Worth seeing in the
+        // logs — it means either a product type this app doesn't sell, or a
+        // payload shape that changed.
+        if ($user->subscription_expires_at === null) {
+            Log::warning('RevenueCat webhook granted a paid tier with no expiry available', [
+                'user_id' => $user->id,
+                'tier' => $tier,
+            ]);
+        }
+
+        return $user->subscription_expires_at;
     }
 
     /**

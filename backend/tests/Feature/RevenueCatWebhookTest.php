@@ -131,4 +131,76 @@ class RevenueCatWebhookTest extends TestCase
         $this->assertSame('canceled', $fresh->subscription_status);
         $this->assertTrue($fresh->hasActiveSubscription());
     }
+
+    /**
+     * A paid event with no expiration_at_ms must not clear the stored expiry:
+     * null on a paid tier reads as a lifetime entitlement downstream, so
+     * doing so would grant permanent access on the strength of a missing
+     * field.
+     */
+    public function test_a_paid_event_without_an_expiry_keeps_the_stored_one(): void
+    {
+        $expiresAt = now()->addDays(20)->startOfSecond();
+        $user = User::factory()->create([
+            'subscription_tier' => 'starter',
+            'subscription_expires_at' => $expiresAt,
+        ]);
+
+        $this->postWebhook([
+            'type' => 'PRODUCT_CHANGE',
+            'app_user_id' => (string) $user->id,
+            'entitlement_ids' => ['pro'],
+        ])->assertNoContent();
+
+        $fresh = $user->fresh();
+        $this->assertSame('pro', $fresh->subscription_tier);
+        $this->assertTrue($fresh->subscription_expires_at->equalTo($expiresAt));
+    }
+
+    /**
+     * The counterpart: when the event resolves to the free tier, a null
+     * expiry is meaningful rather than absent, and must be written.
+     */
+    public function test_an_expiration_event_clears_the_stored_expiry(): void
+    {
+        $user = User::factory()->create([
+            'subscription_tier' => 'pro',
+            'subscription_expires_at' => now()->addDays(5),
+        ]);
+
+        $this->postWebhook([
+            'type' => 'EXPIRATION',
+            'app_user_id' => (string) $user->id,
+            'entitlement_ids' => [],
+        ])->assertNoContent();
+
+        $fresh = $user->fresh();
+        $this->assertSame('free', $fresh->subscription_tier);
+        $this->assertNull($fresh->subscription_expires_at);
+    }
+
+    /**
+     * The case the old code got wrong: RevenueCat sends EXPIRATION events
+     * carrying the entitlement that expired, not an empty list. The stored
+     * (now past) expiry is what makes this safe — the tier column still says
+     * 'pro', but User::effectiveTier() reads the date and returns 'free'.
+     */
+    public function test_an_expiration_event_that_still_lists_the_entitlement_does_not_extend_access(): void
+    {
+        $user = User::factory()->create([
+            'subscription_tier' => 'pro',
+            'subscription_expires_at' => now()->subDay(),
+        ]);
+
+        $this->postWebhook([
+            'type' => 'EXPIRATION',
+            'app_user_id' => (string) $user->id,
+            'entitlement_ids' => ['pro'],
+        ])->assertNoContent();
+
+        $fresh = $user->fresh();
+        $this->assertFalse($fresh->hasActiveSubscription());
+        $this->assertSame('free', $fresh->effectiveTier());
+        $this->assertSame(0, $fresh->monthlyGenerationLimit());
+    }
 }

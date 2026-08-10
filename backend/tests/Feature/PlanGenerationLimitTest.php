@@ -111,4 +111,112 @@ class PlanGenerationLimitTest extends TestCase
 
         Queue::assertPushed(GeneratePlanSteps::class, 1);
     }
+
+    /**
+     * The column still says 'pro' because nothing has cleared it — a missed
+     * or undelivered webhook is the normal way this state arises, and the
+     * refresh endpoint only runs when someone opens the paywall, which a
+     * churned user never does. Access must therefore key off the expiry, not
+     * the tier the store last reported.
+     */
+    public function test_a_lapsed_paid_tier_gets_no_monthly_allowance(): void
+    {
+        Queue::fake();
+        config(['subscriptions.tiers.pro.monthly_generations' => 25]);
+        $user = User::factory()->create([
+            'subscription_tier' => 'pro',
+            'subscription_status' => 'active',
+            'subscription_expires_at' => now()->subDay(),
+            // Already used while on the free tier, so the one-time free
+            // generation can't mask the lapse being enforced.
+            'free_generation_claimed_at' => now()->subYear(),
+        ]);
+
+        $this->generate($user)->assertStatus(429);
+
+        Queue::assertNothingPushed();
+    }
+
+    /**
+     * The rolling window is what makes this leak permanent rather than
+     * one-off: every month it zeroes plans_generated_count, so a lapsed
+     * subscriber whose tier is still 'pro' would get a fresh 25 generations
+     * for as long as the account exists.
+     */
+    public function test_a_lapsed_paid_tier_does_not_regain_its_allowance_each_month(): void
+    {
+        Queue::fake();
+        config(['subscriptions.tiers.pro.monthly_generations' => 25]);
+        Carbon::setTestNow('2026-01-01 00:00:00');
+        $user = User::factory()->create([
+            'subscription_tier' => 'pro',
+            'subscription_expires_at' => Carbon::parse('2025-12-01 00:00:00'),
+            'free_generation_claimed_at' => Carbon::parse('2025-01-01 00:00:00'),
+        ]);
+
+        $this->generate($user)->assertStatus(429);
+
+        Carbon::setTestNow('2026-02-02 00:00:00');
+        $this->generate($user)->assertStatus(429);
+
+        Queue::assertNothingPushed();
+        Carbon::setTestNow();
+    }
+
+    /**
+     * A lapsed subscriber is back on the free tier, so they reach the free
+     * tier's one-time generation — but only if they never claimed it.
+     */
+    public function test_a_lapsed_subscriber_falls_back_to_an_unclaimed_free_generation(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create([
+            'subscription_tier' => 'pro',
+            'subscription_expires_at' => now()->subDay(),
+            'free_generation_claimed_at' => null,
+        ]);
+
+        $this->generate($user)->assertCreated();
+        $this->generate($user)->assertStatus(429);
+
+        Queue::assertPushed(GeneratePlanSteps::class, 1);
+    }
+
+    /**
+     * A null expiry on a paid tier is a lifetime entitlement, which
+     * RevenueCatService reports that way by design — it must not be read as
+     * "expired at an unknown time".
+     */
+    public function test_a_lifetime_entitlement_keeps_its_allowance(): void
+    {
+        Queue::fake();
+        config(['subscriptions.tiers.pro.monthly_generations' => 2]);
+        $user = User::factory()->create([
+            'subscription_tier' => 'pro',
+            'subscription_expires_at' => null,
+        ]);
+
+        $this->generate($user)->assertCreated();
+        $this->generate($user)->assertCreated();
+        $this->generate($user)->assertStatus(429);
+
+        Queue::assertPushed(GeneratePlanSteps::class, 2);
+    }
+
+    public function test_a_lapsed_subscriber_is_told_their_subscription_expired(): void
+    {
+        $user = User::factory()->create([
+            'subscription_tier' => 'starter',
+            'subscription_expires_at' => now()->subDay(),
+            'free_generation_claimed_at' => now()->subYear(),
+        ]);
+
+        $this->actingAs($user)->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('subscription_tier', 'free')
+            ->assertJsonPath('can_generate', false)
+            ->assertJsonPath('generations_limit', 0)
+            ->assertJsonPath('generations_remaining', 0)
+            ->assertJsonPath('generation_limit_message', 'Your subscription has expired. Resubscribe to generate more plans.');
+    }
 }

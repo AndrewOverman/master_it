@@ -28,7 +28,14 @@ class UserResource extends JsonResource
             // it (banner shown, plan generation gated), and the date itself
             // isn't something anyone is shown.
             'email_verified' => $this->hasVerifiedEmail(),
-            'subscription_tier' => $this->subscription_tier,
+            // The *effective* tier, not the raw column — a lapsed paid tier
+            // reports as 'free' here, because that's what the account can
+            // actually do. Serving the stored tier instead would contradict
+            // the allowance fields below (tier 'pro' beside a limit of 0) and
+            // show a lapsed subscriber a Pro badge in Settings.
+            // subscription_status and subscription_expires_at still carry the
+            // history, which is what the "Renews/Ends on" row reads.
+            'subscription_tier' => $this->effectiveTier(),
             'subscription_status' => $this->subscription_status,
             // ISO-8601 so the client can format it in the device's locale.
             // Null on the free tier and for anyone who has never subscribed —

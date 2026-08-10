@@ -83,7 +83,20 @@ export function SettingsScreen() {
   // "Renews" vs "Ends" is the difference between a live subscription and one
   // that's been cancelled but still has time on it — telling someone their
   // cancelled plan "renews" next month is actively wrong.
-  const expiryLabel = user?.subscription_status === 'canceled' ? 'Ends' : 'Renews';
+  //
+  // "Expired" is read off the date rather than subscription_status: a lapse
+  // reaches us as whatever event RevenueCat last sent (or as nothing at all,
+  // if that webhook was missed), so the date is the only thing that reliably
+  // says the subscription is over. Without this, a past date renders as
+  // "Renews on <date that has already passed>".
+  const expiredAlready = user?.subscription_expires_at
+    ? new Date(user.subscription_expires_at).getTime() <= Date.now()
+    : false;
+  const expiryLabel = expiredAlready
+    ? 'Expired'
+    : user?.subscription_status === 'canceled'
+      ? 'Ends'
+      : 'Renews';
   const expiresAt = user?.subscription_expires_at
     ? new Date(user.subscription_expires_at).toLocaleDateString(undefined, {
         year: 'numeric',
