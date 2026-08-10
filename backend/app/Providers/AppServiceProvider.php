@@ -53,6 +53,14 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Keyed by user rather than IP because the route is behind
+        // auth:sanctum — the caller is always a known account, and the thing
+        // being rationed is mail sent to that one address (and our Resend
+        // quota), not requests from a network.
+        RateLimiter::for('verification-send', function (Request $request) {
+            return Limit::perMinute(2)->by($request->user()?->id ?: $request->ip());
+        });
+
         // Password::sendResetLink() already throttles re-sends to the same
         // email every 60s on its own — this is the outer guard against one
         // IP working through many different emails, so it's keyed by IP

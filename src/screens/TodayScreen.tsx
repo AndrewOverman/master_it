@@ -8,6 +8,7 @@ import { useToggleStep } from '../hooks/useToggleStep';
 import { useRequireOnline } from '../lib/offline';
 import { CreatePlanFab } from '../components/CreatePlanFab';
 import { PlanCompleteOverlay } from '../components/PlanCompleteOverlay';
+import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import { formatDueDate } from '../utils/dueDate';
 import type { Plan } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
@@ -92,6 +93,10 @@ export function TodayScreen({ navigation }: any) {
         ListHeaderComponent={
           <>
             <GreetingHeader user={user} styles={styles} />
+            {/* Above the plan list rather than below the greeting's fold:
+                until this is dealt with, creating a plan — the only thing
+                this screen invites you to do — will be refused. */}
+            <VerifyEmailBanner />
             {hasNoPlans ? <FirstPlanHero colors={colors} styles={styles} onCreate={openNewPlan} /> : null}
             {activePlans.length > 0 ? <Text style={styles.sectionHeading}>Up next</Text> : null}
           </>

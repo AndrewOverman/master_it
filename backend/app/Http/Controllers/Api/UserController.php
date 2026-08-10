@@ -35,7 +35,20 @@ class UserController extends Controller
         }
         unset($validated['current_password']);
 
+        // Checked before the update, while $user->email is still the old one.
+        $emailChanged = isset($validated['email']) && $validated['email'] !== $user->email;
+
         $user->update($validated);
+
+        // A new address is unverified until proven otherwise. Without this,
+        // verifying once and then changing the email would carry the verified
+        // flag over to an address nobody has proven they own — and that flag
+        // is the whole gate on plan generation. forceFill because
+        // email_verified_at is deliberately not mass-assignable.
+        if ($emailChanged) {
+            $user->forceFill(['email_verified_at' => null])->save();
+            $user->sendEmailVerificationNotification();
+        }
 
         // Same shape as show() — AccountScreen writes this response straight
         // into the shared ['user'] cache, so returning the bare model here

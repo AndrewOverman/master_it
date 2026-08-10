@@ -14,6 +14,7 @@ import {
   type NativeStackHeaderProps,
 } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useQueryClient } from '@tanstack/react-query';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
@@ -323,6 +324,7 @@ function RootNavigatorContent() {
   const { isAuthenticated } = useAuth();
   const { colors, colorScheme } = useTheme();
   const navigationRef = useNavigationContainerRef();
+  const queryClient = useQueryClient();
   const [pendingShareToken, setPendingShareToken] = useState<string | null>(null);
   const [pendingResetParams, setPendingResetParams] = useState<{ token: string; email: string } | null>(
     null
@@ -337,11 +339,20 @@ function RootNavigatorContent() {
       if (shareToken) setPendingShareToken(shareToken);
       const resetParams = extractResetParams(url);
       if (resetParams) setPendingResetParams(resetParams);
+
+      // Verification happens entirely on the web page the emailed link opens
+      // (see the backend's EmailVerificationController) — by the time the app
+      // is reopened through this link the work is already done, so there's
+      // nowhere to navigate. Refetching the user is the whole job: it's what
+      // clears VerifyEmailBanner and re-enables the New Plan button.
+      if (url?.includes('//email-verified')) {
+        queryClient.invalidateQueries({ queryKey: ['user'] });
+      }
     };
     Linking.getInitialURL().then(handleUrl);
     const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => subscription.remove();
-  }, []);
+  }, [queryClient]);
 
   // Jump straight to the shared plan once there's both a token to act on
   // and an authenticated navigator to act on it in — this is what makes a

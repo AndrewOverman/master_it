@@ -10,6 +10,7 @@ import type { ThemeColors } from '../theme/colors';
 import { useRequireOnline } from '../lib/offline';
 import { PlanLimitModal } from '../components/PlanLimitModal';
 import { Button, TextField } from '../components/ui';
+import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import { typography } from '../theme/typography';
 import { radius } from '../theme/radius';
 import { spacing } from '../theme/spacing';
@@ -79,6 +80,10 @@ export function NewPlanScreen({ navigation }: any) {
   // options for nothing.
   const { data: user } = useQuery({ queryKey: ['user'], queryFn: getCurrentUser });
   const isOutOfGenerations = user?.can_generate === false;
+  // POST /plans is behind the `verified` middleware, so this form can't
+  // succeed for an unverified account. Same reasoning as the allowance
+  // above: say so before the goal has been typed out, not after.
+  const isUnverified = user?.email_verified === false;
   const generationsLeft = user?.generations_remaining;
 
   // `??` is what makes this correctly self-resolve all three states: no
@@ -130,6 +135,14 @@ export function NewPlanScreen({ navigation }: any) {
       // 429 is the generation allowance, not a fault — same treatment the
       // copy and refine flows give it, rather than a generic "something went
       // wrong" that reads like a bug the user should retry.
+      // Same treatment for the verification gate: expected, actionable, and
+      // not the user's mistake. The banner right above the form already says
+      // what to do, so this only has to refresh it rather than shout.
+      if (error?.response?.data?.code === 'email_unverified') {
+        queryClient.invalidateQueries({ queryKey: ['user'] });
+        return;
+      }
+
       if (error?.response?.status === 429) {
         // The allowance clearly changed under us, so refresh what the form
         // is showing along with it.
@@ -173,6 +186,11 @@ export function NewPlanScreen({ navigation }: any) {
       <Text style={styles.subheading}>
         Describe a skill or goal. We'll build you a step-by-step plan.
       </Text>
+
+      {/* Renders nothing once the address is verified. Carries its own
+          "Resend email" action, which is the only way out of the disabled
+          submit button below. */}
+      <VerifyEmailBanner />
 
       {isOutOfGenerations && (
         <View style={styles.limitNotice}>
@@ -356,10 +374,10 @@ export function NewPlanScreen({ navigation }: any) {
         label="Build my plan"
         onPress={handleSubmit}
         loading={mutation.isPending}
-        disabled={isOutOfGenerations}
+        disabled={isOutOfGenerations || isUnverified}
         style={styles.submitButton}
       />
-      {!isOutOfGenerations && generationsLeft !== undefined && generationsLeft > 0 && (
+      {!isOutOfGenerations && !isUnverified && generationsLeft !== undefined && generationsLeft > 0 && (
         <Text style={styles.allowanceHint}>
           {generationsLeft} plan generation{generationsLeft === 1 ? '' : 's'} left
         </Text>

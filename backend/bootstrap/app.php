@@ -22,6 +22,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->throttleApi();
 
+        // Same name, JSON body with a `code` the client can branch on —
+        // see App\Http\Middleware\EnsureEmailIsVerified.
+        $middleware->alias([
+            'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
+        ]);
+
         // Railway (and most PaaS hosts) terminate TLS at a reverse proxy in
         // front of the app, so trust the forwarded headers it sets — without
         // this, Request::secure() and absolute URL generation are wrong in

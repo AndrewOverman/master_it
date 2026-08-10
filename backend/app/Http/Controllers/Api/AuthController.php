@@ -68,6 +68,21 @@ class AuthController extends Controller
         return response()->noContent();
     }
 
+    public function resendVerification(Request $request)
+    {
+        $user = $request->user();
+
+        // Not an error — a verified user tapping a stale banner should see
+        // the same calm outcome as anyone else, and there's nothing to send.
+        if (! $user->hasVerifiedEmail()) {
+            $user->sendEmailVerificationNotification();
+        }
+
+        return response()->json([
+            'message' => 'If your email still needs verifying, a new link is on its way.',
+        ]);
+    }
+
     public function forgotPassword(Request $request)
     {
         $validated = $request->validate([

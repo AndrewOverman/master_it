@@ -24,6 +24,10 @@ class UserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            // A boolean, not the timestamp — the app only ever branches on
+            // it (banner shown, plan generation gated), and the date itself
+            // isn't something anyone is shown.
+            'email_verified' => $this->hasVerifiedEmail(),
             'subscription_tier' => $this->subscription_tier,
             'subscription_status' => $this->subscription_status,
             // ISO-8601 so the client can format it in the device's locale.

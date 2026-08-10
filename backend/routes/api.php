@@ -22,6 +22,12 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
 
+        // Deliberately inside the auth group: only the account's own owner can
+        // ask for another verification mail, so this can't be used to send
+        // mail to an address the caller doesn't already hold a token for.
+        Route::post('email/verification-notification', [AuthController::class, 'resendVerification'])
+            ->middleware('throttle:verification-send');
+
         Route::get('user', [UserController::class, 'show']);
         Route::patch('user', [UserController::class, 'update']);
         // Takes no body — see SubscriptionController::refresh(). Throttled
@@ -38,7 +44,11 @@ Route::prefix('v1')->group(function () {
         Route::get('subscriptions/tiers', [SubscriptionController::class, 'tiers']);
 
         Route::get('plans', [PlanController::class, 'index']);
-        Route::post('plans', [PlanController::class, 'store']);
+        // The only route gated on a verified address. Generation is what
+        // costs real money per signup (see User::canGenerate()'s free
+        // lifetime generation), so it's the one place worth the friction —
+        // everything else stays usable while an account is unverified.
+        Route::post('plans', [PlanController::class, 'store'])->middleware('verified');
         Route::get('plans/featured', [PlanController::class, 'featured']);
         Route::get('plans/shared/{token}', [SharedPlanController::class, 'show']);
         Route::post('plans/shared/{token}/copy', [SharedPlanController::class, 'copy']);

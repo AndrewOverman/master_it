@@ -5,6 +5,7 @@ import { getCurrentUser, updateProfile } from '../api/auth';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { Button, Spinner, TextField } from '../components/ui';
+import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import { typography } from '../theme/typography';
 import { spacing } from '../theme/spacing';
 
@@ -157,6 +158,10 @@ export function AccountScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Sits above the email field it's about — changing the address
+          re-triggers verification, so the two belong together. */}
+      <VerifyEmailBanner />
+
       <Text style={styles.sectionTitle}>Profile</Text>
 
       <TextField

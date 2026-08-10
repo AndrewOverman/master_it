@@ -4,6 +4,12 @@ export interface AuthUser {
   id: number;
   name: string;
   email: string;
+  // False until the address is confirmed via the emailed link. Gates plan
+  // generation server-side (`verified` middleware on POST /plans), so the
+  // banner and the New Plan form both read this rather than discovering it
+  // from a rejected request. Optional for the same reason as the fields
+  // below — login/register return the bare model, not UserResource.
+  email_verified?: boolean;
   // Generation allowance, computed server-side (see UserResource) so the
   // rolling-window and free-tier rules live in exactly one place. Optional
   // because login/register still return the bare user shape.
@@ -61,6 +67,13 @@ export async function resetPassword(payload: {
   password: string;
 }): Promise<void> {
   await apiClient.post('/api/v1/reset-password', payload);
+}
+
+// POST /api/v1/email/verification-notification
+// Always resolves for an authenticated caller, verified or not — the backend
+// gives the same response either way, so there's nothing to branch on.
+export async function resendVerificationEmail(): Promise<void> {
+  await apiClient.post('/api/v1/email/verification-notification');
 }
 
 // GET /api/v1/user
