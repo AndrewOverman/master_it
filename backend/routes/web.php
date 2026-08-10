@@ -8,6 +8,14 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Public and unauthenticated by necessity: these are linked from the sign-up
+// screen and the paywall, both of which are reachable before an account
+// exists, and Apple checks them from outside the app during review. The paths
+// are what src/lib/legal.ts derives from EXPO_PUBLIC_API_URL by default —
+// changing either means changing that too.
+Route::view('/privacy', 'privacy')->name('privacy');
+Route::view('/terms', 'terms')->name('terms');
+
 // Unauthenticated on purpose — a share link has to work for a recipient
 // who isn't logged in (or doesn't have the app) yet. Same path suffix the
 // mobile app's extractShareToken() already matches on regardless of host

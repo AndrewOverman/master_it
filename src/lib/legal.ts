@@ -5,9 +5,9 @@
 // common case; either can be pointed somewhere else entirely (a marketing site,
 // a Notion page) with EXPO_PUBLIC_PRIVACY_URL / EXPO_PUBLIC_TERMS_URL.
 //
-// NOTE: these paths are not served by the backend yet — the documents still
-// have to be written and published before submission. The links exist so the
-// UI is in place and there's a single place to point them.
+// The backend serves both at these paths (backend/routes/web.php, covered by
+// LegalPagesTest) — renaming a path there without changing it here breaks the
+// links silently, since nothing on this side can tell a 404 from a document.
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 export const PRIVACY_POLICY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL ?? `${API_URL}/privacy`;

@@ -46,10 +46,14 @@ whole app imports, which is a larger architectural call than the rest of #31.
 has one. The original item's advice to do it "with VoiceOver actually turned on" still
 stands as a verification step.
 
-### The legal documents don't exist yet
-#40 wired the links and made them configurable (`src/lib/legal.ts`), but the privacy policy
-and terms still have to be written and hosted before submission. The defaults point at
-`/privacy` and `/terms` on the API host, which the backend does not currently serve.
+### ~~The legal documents don't exist yet~~ — closed 2026-08-09
+Both are now served by the backend at the paths `src/lib/legal.ts` already pointed at, as
+Blade views sharing a `legal-layout` component, with the entity, contact address,
+jurisdiction and last-updated date in `config/legal.php`. `LegalPagesTest` covers
+reachability, the cross-links, and the presence of the professional-advice disclaimer.
+
+**They are drafts written against what the code actually does, not reviewed by a lawyer.**
+Get them reviewed before submission.
 
 ---
 
