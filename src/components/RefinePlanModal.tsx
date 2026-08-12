@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
 import { REFINEMENT_TAG_LABELS, RefinementTag } from '../types/plan';
-import { Button, TextField } from './ui';
+import { Button, TextField, useOnModalHidden } from './ui';
 import { shadows } from '../theme/shadows';
 import { typography } from '../theme/typography';
 import { radius } from '../theme/radius';
@@ -24,6 +24,11 @@ interface RefinePlanModalProps {
   completedSteps: number;
   onSubmit: (input: { tags: RefinementTag[]; notes: string }) => void;
   onDismiss: () => void;
+  // Fires once this modal is actually off screen. Submitting can be answered
+  // with a limit modal (a 429 on the generation allowance), and iOS won't
+  // present that one while this one is still dismissing — see
+  // useOnModalHidden.
+  onHidden?: () => void;
 }
 
 // Tag chips mirror NewPlanScreen's option-chip pattern; the modal shell
@@ -34,11 +39,13 @@ export function RefinePlanModal({
   completedSteps,
   onSubmit,
   onDismiss,
+  onHidden,
 }: RefinePlanModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [selectedTags, setSelectedTags] = useState<RefinementTag[]>([]);
   const [notes, setNotes] = useState('');
+  const hiddenProps = useOnModalHidden(visible, () => onHidden?.());
 
   const toggleTag = (tag: RefinementTag) => {
     setSelectedTags((current) =>
@@ -68,7 +75,7 @@ export function RefinePlanModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss} {...hiddenProps}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>Refine this plan</Text>

@@ -64,6 +64,13 @@ export function PlanDetailScreen({ route, navigation }: any) {
     dismissLimitModal: dismissRefineLimitModal,
   } = useRefinePlan(navigation, planId);
   const [refineModalVisible, setRefineModalVisible] = useState(false);
+  // Whether the refine modal has finished leaving the screen. Submitting can
+  // be answered with the generation-limit modal, and on iOS that one is
+  // dropped outright if it tries to present while the refine modal is still
+  // dismissing — a 429 off a nearby server can beat the fade out. Gating on
+  // this holds the limit modal back until there's room for it, the same rule
+  // ActionSheet follows for its own actions (see useOnModalHidden).
+  const [refineModalHidden, setRefineModalHidden] = useState(true);
   const [menuVisible, setMenuVisible] = useState(false);
   // Tracks which refinement id we've already alerted on, so a failed
   // attempt surfaces its "didn't take" alert once per attempt rather than
@@ -152,6 +159,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
       icon: 'sparkles-outline',
       onPress: () => {
         setMenuVisible(false);
+        setRefineModalHidden(false);
         setRefineModalVisible(true);
       },
     },
@@ -229,7 +237,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
   return (
     <View style={styles.container}>
       <PlanLimitModal
-        visible={refineLimitModalVisible}
+        visible={refineLimitModalVisible && refineModalHidden}
         title="Out of plan generations"
         message={refineLimitModalMessage}
         onUpgrade={() => {
@@ -246,6 +254,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
         completedSteps={completedCount}
         onSubmit={handleRefineSubmit}
         onDismiss={() => setRefineModalVisible(false)}
+        onHidden={() => setRefineModalHidden(true)}
       />
       {/* Celebrated right here, on the screen where the user finished the
           plan. This used to navigate to My Plans purely because that's where
