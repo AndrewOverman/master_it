@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\PushToken;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -21,6 +22,19 @@ class SubscriptionNotificationTest extends TestCase
         parent::setUp();
 
         config(['services.revenuecat.webhook_secret' => 'test-secret']);
+
+        // A payment issue is an Account-category message, so it's subject to
+        // quiet hours — without a fixed clock these tests only pass when the
+        // suite happens to run during the day in UTC. Devices below are all
+        // UTC, so this is mid-morning for every user in this file.
+        Carbon::setTestNow('2026-08-10 12:00:00');
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     private function userWithDevice(array $attributes = []): User
