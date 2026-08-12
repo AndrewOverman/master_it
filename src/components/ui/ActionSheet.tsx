@@ -16,6 +16,7 @@ import type { ThemeColors } from '../../theme/colors';
 import { radius } from '../../theme/radius';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { useOnModalHidden } from './useOnModalHidden';
 
 export interface SheetAction {
   label: string;
@@ -65,6 +66,24 @@ export function ActionSheet({ visible, title, actions, onDismiss }: ActionSheetP
   // so what's mounted is tracked separately from what's requested.
   const [mounted, setMounted] = useState(visible);
 
+  // Actions don't run on press — they run once this sheet is off screen.
+  //
+  // An action that opens another modal (PlanDetail's "Refine plan") used to
+  // do nothing at all: the sheet only *requests* its dismissal on the tick
+  // the next modal asks to open, and iOS drops a modal presented while
+  // another is still on screen. See useOnModalHidden for the full story.
+  const pendingActionRef = useRef<(() => void) | null>(null);
+
+  const runPendingAction = () => {
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    action?.();
+  };
+
+  // `mounted`, not `visible` — the sheet outlives the close request by its
+  // own exit animation, and the modal isn't going anywhere until then.
+  const hiddenProps = useOnModalHidden(mounted, runPendingAction);
+
   useEffect(() => {
     if (visible) {
       setMounted(true);
@@ -83,13 +102,18 @@ export function ActionSheet({ visible, title, actions, onDismiss }: ActionSheetP
     return () => animation.stop();
   }, [visible, progress]);
 
+  const handleActionPress = (action: SheetAction) => {
+    pendingActionRef.current = action.onPress;
+    onDismiss();
+  };
+
   const translateY = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [sheetHeight || UNMEASURED_SHEET_HEIGHT, 0],
   });
 
   return (
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onDismiss}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onDismiss} {...hiddenProps}>
       <View style={styles.root}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, { opacity: progress }]}>
           <Pressable
@@ -121,7 +145,7 @@ export function ActionSheet({ visible, title, actions, onDismiss }: ActionSheetP
             <TouchableOpacity
               key={action.label}
               style={styles.action}
-              onPress={action.onPress}
+              onPress={() => handleActionPress(action)}
               accessibilityRole="button"
               accessibilityLabel={action.label}
             >
