@@ -5,5 +5,7 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["**/*.ts", "**/*.tsx", "App.tsx"]
+  "include": ["**/*.ts", "**/*.tsx", "App.tsx"],
+  "//": "backend/ is the Laravel app; Composer packages ship stray .ts fixtures that the glob above would otherwise typecheck. node_modules is excluded by default, but only once something else is listed here.",
+  "exclude": ["node_modules", "backend"]
 }

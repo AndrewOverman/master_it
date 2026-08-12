@@ -2,7 +2,6 @@ export { ActionSheet, type SheetAction } from './ActionSheet';
 export { Avatar } from './Avatar';
 export { Button } from './Button';
 export { TextField } from './TextField';
-export { Card } from './Card';
 export { Spinner } from './Spinner';
 export { EmptyState } from './EmptyState';
 export { Logo } from './Logo';

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -25,8 +25,8 @@ const STATUS_LABELS: Record<Exclude<PlanStatus, 'ready'>, string> = {
   rejected: "We couldn't build this one",
 };
 
-// A plan carries two independent notions of "done", and the list used to
-// render both with the same green check:
+// A plan carries two independent notions of "done", and the row has to
+// distinguish them rather than badging both the same way:
 //   - every step checked off  — the work actually got finished
 //   - completed_at set        — the user declared the plan finished, which
 //                               they can do at any point, steps or no steps
@@ -219,8 +219,8 @@ export function PlansListScreen({ navigation }: any) {
 
     // Complete first, Reset second. Children render left-to-right, so the
     // first one sits nearest the row and is what a short swipe uncovers —
-    // which previously meant the destructive Reset was the easiest to hit by
-    // accident. Reset now needs a deliberate full swipe (and still confirms).
+    // order matters here, because the destructive action must not be the
+    // easiest to reach. Reset needs a full swipe (and still confirms).
     const renderRightActions = () => (
       <View style={{ flexDirection: 'row' }}>
         <TouchableOpacity

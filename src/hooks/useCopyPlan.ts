@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { copyPlan } from '../api/plans';
@@ -7,12 +6,14 @@ import { useRequireOnline } from '../lib/offline';
 
 // Shared by the read-only preview screens (FeaturedPlan, SharedPlan) —
 // confirm dialog, then clone into the user's own plans and jump straight to
-// it. The feed and Related Plans used to copy directly from a card; they now
-// route through a preview, so adding always happens with the steps in view.
+// it. Adding a plan is only ever reachable through one of those previews, so
+// the steps are always in view before the user commits.
+//
+// No allowance handling here: copying is unlimited on every tier, including
+// free, because it never touches the LLM (see PlanController::copy).
 export function useCopyPlan(navigation: any) {
   const queryClient = useQueryClient();
   const requireOnline = useRequireOnline();
-  const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
 
   const copyMutation = useMutation({
     mutationFn: copyPlan,
@@ -24,17 +25,10 @@ export function useCopyPlan(navigation: any) {
       navigation.navigate('Today', { screen: 'PlanDetail', params: { planId: newPlan.id } });
     },
     onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ?? 'Could not add this plan. Please try again.';
-
-      // 429 means the copy was rejected for being over max_plans, not a
-      // failure — surface it as its own modal rather than a generic error.
-      if (error?.response?.status === 429) {
-        setLimitModalMessage(message);
-        return;
-      }
-
-      Alert.alert('Something went wrong', message);
+      Alert.alert(
+        'Something went wrong',
+        error?.response?.data?.message ?? 'Could not add this plan. Please try again.'
+      );
     },
   });
 
@@ -50,11 +44,5 @@ export function useCopyPlan(navigation: any) {
     );
   };
 
-  return {
-    copyMutation,
-    handleCopyPress,
-    limitModalVisible: limitModalMessage !== null,
-    limitModalMessage: limitModalMessage ?? '',
-    dismissLimitModal: () => setLimitModalMessage(null),
-  };
+  return { copyMutation, handleCopyPress };
 }

@@ -1,5 +1,5 @@
-// Consolidates the ad hoc border-radius values found across screens
-// (2, 4, 8, 10, 12, 13, 14, 16, 20, 26...) into one scale.
+// The app's whole border-radius vocabulary. Screens pick from here rather
+// than writing literals, so corners stay consistent across surfaces.
 export const radius = {
   sm: 8,
   md: 12,
@@ -7,5 +7,3 @@ export const radius = {
   xl: 20,
   pill: 999,
 } as const;
-
-export type RadiusToken = keyof typeof radius;

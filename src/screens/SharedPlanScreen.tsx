@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSharedPlan, copySharedPlan } from '../api/plans';
-import { PlanLimitModal } from '../components/PlanLimitModal';
 import type { PlanStep } from '../types/plan';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/colors';
@@ -21,7 +20,6 @@ export function SharedPlanScreen({ route, navigation }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const requireOnline = useRequireOnline();
-  const [limitModalMessage, setLimitModalMessage] = useState<string | null>(null);
 
   const { data: plan, isLoading, isError } = useQuery({
     queryKey: ['sharedPlan', token],
@@ -37,12 +35,14 @@ export function SharedPlanScreen({ route, navigation }: any) {
       // the copy the user now owns belongs with their own plans.
       navigation.navigate('Today', { screen: 'PlanDetail', params: { planId: newPlan.id } });
     },
+    // Copying is unlimited on every tier (it never touches the LLM), so
+    // there's no allowance case to distinguish here — anything that fails is
+    // a genuine fault, and staying silent would read as a dead button.
     onError: (error: any) => {
-      if (error?.response?.status === 429) {
-        setLimitModalMessage(
-          error?.response?.data?.message ?? "You've reached your plan limit."
-        );
-      }
+      Alert.alert(
+        'Something went wrong',
+        error?.response?.data?.message ?? 'Could not add this plan. Please try again.'
+      );
     },
   });
 
@@ -84,11 +84,6 @@ export function SharedPlanScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <PlanLimitModal
-        visible={limitModalMessage !== null}
-        message={limitModalMessage ?? ''}
-        onDismiss={() => setLimitModalMessage(null)}
-      />
       <View style={styles.header}>
         {plan.emoji && <Text style={styles.emoji}>{plan.emoji}</Text>}
         <Text style={styles.planTitle}>{plan.title}</Text>

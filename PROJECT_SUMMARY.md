@@ -8,80 +8,79 @@ for plan generation.
 ## Stack
 
 - **Frontend**: Expo (React Native + TypeScript) at the repo root. React
-  Navigation (stack + drawer), TanStack Query, Axios, `expo-secure-store` for
-  the auth token.
+  Navigation (bottom tabs, one native stack per tab), TanStack Query with an
+  AsyncStorage persister for offline reads, Axios, `expo-secure-store` for the
+  auth token.
 - **Backend**: Laravel 13 in `backend/`, Sanctum personal-access-token auth
   (bearer token, not cookie/SPA auth).
+- **Subscriptions**: RevenueCat — `react-native-purchases` in the app, the
+  REST API plus a webhook on the backend.
 - **Database**: Supabase Postgres, accessed via the **session pooler**
   (`aws-0-us-east-2.pooler.supabase.com`) — the direct-connection host is
   IPv6-only and unreachable from this dev machine.
 - **AI**: Anthropic Claude (`claude-sonnet-5`) generates each plan's steps.
 
-## What's been built, in order
+## What the app does
 
-### 1. Initial scaffold
-Expo RN app wired to a Laravel + Sanctum backend. Core screens: New Plan →
-Generating → Plan Detail, matching a `Plan` / `PlanStep` API contract.
-Backend: `PlanController` (create/list/show), `PlanStepController` (toggle
-step completion), a queued `GeneratePlanSteps` job, Sanctum token auth
-(`/api/v1/register`, `/api/v1/login`, `/api/v1/logout`).
+Three tabs, each with its own navigation stack (`src/navigation/RootNavigator.tsx`):
 
-### 2. Login/register screen
-Email/password form with a Login ↔ Sign-up toggle. Stores the returned
-Sanctum token in `SecureStore`. `RootNavigator` checks for a stored token on
-launch and routes to Login or straight into the app accordingly.
+- **Today** — the user's own plans. Today's steps across every active plan,
+  through to All Plans, Plan Detail (the step checklist), and Step Detail.
+- **Explore** — admin-curated featured plans, plus the read-only preview a
+  share link opens.
+- **Me** — account details and settings.
 
-### 3. Drawer navigation + Plans list
-Hamburger menu (drawer) wrapping the app's stack navigator, styled with
-branding and a "Plans" item. New `PlansListScreen` lists all of a user's
-plans via `GET /api/v1/plans`; tapping one opens its step checklist.
+### Plan generation
+`POST /api/v1/plans` records the goal, skill level, time commitment and target
+length, then queues `GeneratePlanSteps`, which asks Claude for an ordered set
+of steps via tool use. The app polls the plan on the Generating screen until
+it leaves `generating`.
 
-### 4. Plan duration field
-"How long should this plan take?" weeks/days input on the New Plan screen,
-combining into `target_days` on the create-plan request. Left blank, the
-backend defaults to a ~30-day plan.
+- The step *count* is decided server-side from the plan's length and time
+  commitment (`stepBudget()`), not left to the model.
+- The instructions and worked examples are a **cached** system block; only the
+  per-plan specifics go in the user message.
+- Claude can call `flag_unsupported_goal` instead, which lands the plan in
+  `rejected` with its own screen rather than a generic failure.
+- A failed job leaves the plan `failed` with a retry that doesn't re-charge
+  the user's allowance (`PlanController::retry`).
 
-### 5. Video steps
-`plan_steps.video_url` (nullable) — steps with a video show a tappable
-YouTube thumbnail; steps without one show nothing extra. Currently attached
-to a plan's first step only as a placeholder (a fixed, generic video), since
-there's no real per-topic video search integrated yet.
+### Steps
+Each step carries a description, an estimated duration, and a due date
+accumulated from the plan's start. Steps can be checked off from either Today
+or Plan Detail (`useToggleStep`, shared so the two can't drift). Finishing the
+last one triggers `PlanCompleteOverlay` and its feedback prompt.
 
-### 6. AI-generated plan steps (replacing the old fixed template)
-`GeneratePlanSteps` now calls the Anthropic API with the plan's actual
-prompt, skill level, time commitment, and target days, using forced tool-use
-for reliable structured JSON output, instead of a hardcoded 5-phase
-template. Steps come back genuinely specific to the stated goal. Hardened
-against Claude occasionally returning the steps field as a JSON string
-instead of a native array.
+Opening a step for the first time lazily searches for supporting resources
+(`ResourceSearchService`) and, for the ≤2 steps per plan the model marks as
+benefiting from one, a YouTube video (`YouTubeVideoSearchService`). Copies of
+a featured plan reuse the original's resources rather than each paying for
+their own search.
 
-### 7. Per-user plan limits
-Since plan generation calls a paid API, `users.max_plans` (default 3, not
-mass-assignable — only adjustable server-side) caps how many plans an
-account can create. Exceeding it returns a 429 with a message surfaced in
-the app instead of a generic error.
+### Refinement
+`POST /plans/{plan}/refine` re-runs generation with the existing steps as a
+baseline plus tags/notes describing what to change. A refinement that fails or
+gets flagged leaves the original plan untouched.
 
-### 8. Prompt caching
-Split the Claude prompt into a large, **static, cached** system block (task
-framing, quality rules, three worked examples) and a small **dynamic** user
-message (just that plan's specifics). Verified end-to-end: a cold write
-followed by a full cache hit at roughly 10% of normal input-token cost, with
-no loss in output quality.
+### Sharing and copying
+Owners can mint a 30-day share token; the link resolves through the backend's
+one public web page, which deep-links into the app or falls back to the store.
+Anyone signed in can copy a featured or shared plan into their own plans.
+Copying is unlimited on every tier — it never touches the LLM.
 
-### 9. Plan image spot
-A small "image spot" to the left of each row on the Plans list, showing that
-plan's emoji (currently entered manually in the DB per plan; the AI-returned
-emoji field exists on the model but isn't wired up as the source yet), or a
-placeholder icon when a plan has none.
+### Subscriptions
+Tiers live in `config/subscriptions.php` and cap **monthly AI generations**
+(free: 0, plus a one-time lifetime generation; starter: 10; pro: 25). There is
+no cap on how many plans an account may hold. Purchases go through RevenueCat;
+entitlements reach the backend both by webhook (durable) and by an
+authenticated refresh endpoint that asks RevenueCat directly rather than
+trusting the client (`SubscriptionSyncService` is the only writer).
 
-### 10. Landscape orientation support
-- Unlocked orientation in `app.json` (was locked to portrait-only).
-- New Plan screen content is capped at a max width and centered instead of
-  stretching edge-to-edge on wider screens.
-- Replaced the native header with a custom component (native iOS headers
-  can't be resized via style props) to get a taller bar and a bigger
-  hamburger icon, with safe-area insets applied on all sides so it's no
-  longer clipped behind the notch in landscape. Confirmed working.
+### Cross-cutting
+Light/dark theming with a shared token set (`src/theme/`), a small shared UI
+kit (`src/components/ui/`), offline-aware reads via a persisted query cache
+with edits blocked while offline, and password reset over a `masterit://`
+deep link.
 
 ## Local dev setup
 
@@ -95,6 +94,12 @@ placeholder icon when a plan has none.
   backend.
 - **Required secrets** (local-only, in `backend/.env`, gitignored):
   Supabase DB credentials, `ANTHROPIC_API_KEY`.
+- **Pre-commit hook**: `.githooks/pre-commit` runs `pint --test` on staged PHP
+  files, so a style violation fails locally instead of failing CI before the
+  backend tests get to run. `npm install` enables it (the root `prepare`
+  script sets `core.hooksPath`); by hand it's
+  `git config core.hooksPath .githooks`. It no-ops when `backend/vendor` isn't
+  installed, and `git commit --no-verify` skips it.
 
 ## Environments (dev / staging / production)
 
@@ -153,9 +158,14 @@ distinct bundle identifier (`com.masterit.app.dev` / `.staging` / unsuffixed)
 so all three can be installed side by side on one device, and each pointed
 at that environment's `EXPO_PUBLIC_API_URL`.
 
-## Git history
+## Known gaps
 
-Four commits so far: initial scaffold, login/register + iOS Simulator dev
-config, drawer navigation + duration + video + AI generation + plan limits,
-and prompt caching. The plan-image-spot and landscape work above are not
-yet committed.
+Tracked in `UX_AUDIT_REMAINING.md`, which is the live list. The two worth
+knowing before touching related code:
+
+- **Refinement resets progress.** `GeneratePlanSteps` replaces every step on a
+  successful refinement, so `completed_at` is lost. The modal warns about it;
+  the behavior is unchanged.
+- **The legal documents don't exist.** `src/lib/legal.ts` points at `/privacy`
+  and `/terms` on the API host, which the backend does not serve. They have to
+  be written and hosted before submission.

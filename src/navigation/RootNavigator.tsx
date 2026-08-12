@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,10 +47,9 @@ import { Spinner } from '../components/ui';
 import { typography } from '../theme/typography';
 import { spacing } from '../theme/spacing';
 
-// One stack per tab, rather than a single stack shared by everything.
-// Previously Account and Settings were pushed onto the same stack as the
-// plan flow, so backing out of Account landed on Settings, and the stack
-// only ever grew. Now each tab keeps its own history.
+// One stack per tab, rather than a single stack shared by everything, so
+// each tab keeps its own history — backing out of Account can't land on a
+// plan screen, and no single stack grows without bound.
 //
 // Screens that operate on the user's *own* plans live in the Plans stack and
 // only there. Explore-side actions that produce or open one of your plans
@@ -199,12 +198,11 @@ function BackButton() {
 // UINavigationBar), so this replaces the header entirely to get a taller
 // bar and bigger touch targets.
 //
-// The left slot is now driven by `back`: any pushed screen gets a back
-// button automatically, and each tab's root screen gets nothing. That's what
-// fixes New Plan, which used to show a hamburger — leaving someone who
-// opened it by mistake with no visible way out. Screens can still override
-// the slot via `options.headerLeft` (GeneratingScreen suppresses it while a
-// plan is being built).
+// The left slot is driven by `back`: any pushed screen gets a back button
+// automatically and each tab's root screen gets nothing, so no pushed screen
+// can strand someone who opened it by mistake. Screens can still override the
+// slot via `options.headerLeft` (GeneratingScreen suppresses it while a plan
+// is being built).
 function AppHeader({ options, back }: NativeStackHeaderProps) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -258,8 +256,8 @@ function CloseButton() {
   );
 }
 
-// The drawer used to be the only route to Settings. With it gone, the Me
-// tab's root screen carries the entry point instead.
+// The only route to Settings — it isn't a tab of its own, so the Me tab's
+// root screen carries the entry point.
 function SettingsButton() {
   const navigation = useNavigation<any>();
   const { colors } = useTheme();
@@ -573,8 +571,8 @@ const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     header: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     headerContent: {
-      // minHeight, not height: the title scales with Dynamic Type, and a fixed
-      // 68 clipped it at the larger accessibility sizes.
+      // minHeight, not height: the title scales with Dynamic Type, and a
+      // fixed value clips it at the larger accessibility sizes.
       minHeight: 68,
       flexDirection: 'row',
       alignItems: 'center',

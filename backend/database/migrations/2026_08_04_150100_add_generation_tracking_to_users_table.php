@@ -23,9 +23,8 @@ return new class extends Migration
             $table->timestamp('generation_period_started_at')->nullable()->after('plans_generated_count');
 
             // Set the first (and only) time a free-tier account uses its
-            // lifetime generation. Paired with device_attestations for the
-            // actual anti-abuse check — this column is just the fast,
-            // account-level lookup.
+            // lifetime generation. Account-level, so it doesn't stop the
+            // same person registering again — see User::canGenerate().
             $table->timestamp('free_generation_claimed_at')->nullable()->after('generation_period_started_at');
         });
     }

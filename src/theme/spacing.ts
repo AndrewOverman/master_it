@@ -1,5 +1,5 @@
-// Consolidates the dozen-plus raw spacing values found across screens
-// (4, 6, 8, 10, 12, 14, 16, 20, 22, 24, 28, 32...) into one scale.
+// The app's whole spacing vocabulary. Screens pick from here rather than
+// writing literals, so rhythm stays consistent across layouts.
 export const spacing = {
   xxs: 4,
   xs: 8,
@@ -10,5 +10,3 @@ export const spacing = {
   xxl: 32,
   xxxl: 40,
 } as const;
-
-export type SpacingToken = keyof typeof spacing;

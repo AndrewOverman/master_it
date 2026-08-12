@@ -49,8 +49,8 @@ class GeneratePlanSteps implements ShouldQueue
     private const DEFAULT_IDEAL_STEP_DAYS = 4.5;
 
     // At the same time commitment a beginner needs smaller, more numerous
-    // steps than an advanced person — the system prompt says so, but nothing
-    // enforced it before this.
+    // steps than an advanced person. The system prompt asks for this too;
+    // this is what actually enforces it in the step count.
     private const BEGINNER_STEP_DAYS_FACTOR = 0.75;
 
     // Below MIN_STEPS a plan doesn't read as a plan; above MAX_STEPS it reads
@@ -59,6 +59,15 @@ class GeneratePlanSteps implements ShouldQueue
     private const MIN_STEPS = 4;
 
     private const MAX_STEPS = 8;
+
+    // The categories flag_unsupported_goal may return. Declared once and
+    // used both in the tool schema below and to validate what comes back,
+    // so a category Claude is offered can't be one we then discard.
+    private const REJECTION_CATEGORIES = ['illegal', 'obscene', 'violent'];
+
+    // Anything outside REJECTION_CATEGORIES lands here rather than being
+    // trusted through to the database.
+    private const FALLBACK_REJECTION_CATEGORY = 'other';
 
     // Maps a refinement tag to the instruction sentence sent to Claude.
     // PlanController validates incoming tags against availableTags() below,
@@ -283,12 +292,9 @@ class GeneratePlanSteps implements ShouldQueue
             ]);
 
             // A refinement's requested changes can themselves get flagged,
-            // but that must never take down an already-working plan — leave
-            // it ready with its existing steps untouched and only mark the
-            // refinement attempt itself as failed.
+            // but that must never take down an already-working plan.
             if ($this->isRefinement) {
-                $this->plan->update(['status' => 'ready']);
-                $this->plan->latestRefinement?->update(['status' => 'failed']);
+                $this->abandonRefinement();
 
                 // Deliberately *not* a "your plan is ready" notification,
                 // even though the status column now says ready. This path
@@ -492,7 +498,7 @@ class GeneratePlanSteps implements ShouldQueue
                         'properties' => [
                             'category' => [
                                 'type' => 'string',
-                                'enum' => ['illegal', 'obscene', 'violent'],
+                                'enum' => self::REJECTION_CATEGORIES,
                             ],
                             'reason' => [
                                 'type' => 'string',
@@ -533,11 +539,13 @@ class GeneratePlanSteps implements ShouldQueue
         }
 
         if ($toolUse['name'] === 'flag_unsupported_goal') {
-            $category = $toolUse['input']['category'] ?? 'other';
+            $category = $toolUse['input']['category'] ?? null;
 
             return [
                 'type' => 'rejected',
-                'category' => in_array($category, ['illegal', 'obscene', 'violent'], true) ? $category : 'other',
+                'category' => in_array($category, self::REJECTION_CATEGORIES, true)
+                    ? $category
+                    : self::FALLBACK_REJECTION_CATEGORY,
                 'reason' => $toolUse['input']['reason'] ?? null,
             ];
         }
@@ -623,14 +631,8 @@ class GeneratePlanSteps implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        // A failed refinement must leave the plan exactly as it was — the
-        // user already had a working plan, and losing it behind a dead-end
-        // "failed" screen (whose only recovery path is starting a brand new
-        // plan) would be worse than just reporting that this attempt didn't
-        // take.
         if ($this->isRefinement) {
-            $this->plan->update(['status' => 'ready']);
-            $this->plan->latestRefinement?->update(['status' => 'failed']);
+            $this->abandonRefinement();
 
             // Same reasoning as the content-rejection path in handle():
             // "ready" here means "restored", not "succeeded".
@@ -645,5 +647,22 @@ class GeneratePlanSteps implements ShouldQueue
         ]);
 
         $this->notifier()->planFailed($this->plan);
+    }
+
+    /**
+     * Backs out of a refinement without touching the plan.
+     *
+     * Whether the attempt was flagged by the content policy or died on an
+     * exception, the outcome has to be the same: the user already had a
+     * working plan, and losing it behind a dead-end "failed" screen (whose
+     * only recovery path is starting a brand new plan) is worse than
+     * reporting that this one attempt didn't take. Only the refinement
+     * record is marked failed; the plan goes back to 'ready' with its
+     * existing steps untouched.
+     */
+    private function abandonRefinement(): void
+    {
+        $this->plan->update(['status' => 'ready']);
+        $this->plan->latestRefinement?->update(['status' => 'failed']);
     }
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { deleteAccount } from '../api/auth';

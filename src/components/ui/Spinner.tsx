@@ -1,4 +1,3 @@
-import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { spacing } from '../../theme/spacing';

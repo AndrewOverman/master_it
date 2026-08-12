@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -114,11 +114,10 @@ export function PlanDetailScreen({ route, navigation }: any) {
     shareMutation.mutate();
   };
 
-  // One labelled menu instead of two bare glyphs. "Refine" was a sparkles
-  // icon with no label — nothing about it said it would rewrite every step
-  // and reset the user's progress, and a one-tap unlabelled control is the
-  // wrong amount of friction for an action that consequential. Share loses a
-  // tap, which is a fair trade for both actions saying what they do.
+  // One labelled menu rather than bare header glyphs. Refine rewrites every
+  // step and resets progress, so it needs a control that says what it does —
+  // an unlabelled one-tap icon is the wrong amount of friction for an action
+  // that consequential. Share costs a tap for the same benefit.
   //
   // Only a finished plan is shareable or refinable (mirrors the backend's own
   // gates), so the menu only appears once ready.
@@ -257,9 +256,7 @@ export function PlanDetailScreen({ route, navigation }: any) {
         onHidden={() => setRefineModalHidden(true)}
       />
       {/* Celebrated right here, on the screen where the user finished the
-          plan. This used to navigate to My Plans purely because that's where
-          the overlay lived, which meant finishing a plan yanked you out of
-          the thing you'd just completed. */}
+          plan, rather than navigating them somewhere else to see it. */}
       <ActionSheet
         visible={menuVisible}
         title={plan.title}
@@ -346,7 +343,6 @@ export function PlanDetailScreen({ route, navigation }: any) {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     header: { padding: spacing.lg, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.borderMuted },
     planTitle: { fontSize: typography.h2.fontSize, fontWeight: '700', color: colors.textPrimary },
     progress: { fontSize: typography.caption.fontSize, color: colors.textMuted, marginTop: spacing.xxs },

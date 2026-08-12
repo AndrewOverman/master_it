@@ -235,13 +235,17 @@ it's unguarded by design and worth a deliberate decision.
 - `backend/app/Http/Controllers/Api/PlanController.php::retry`
 - Effort: **XS** if you want a cap (needs a counter column)
 
-### Dead code: the copy-limit modal
+### ~~Dead code: the copy-limit modal~~ — done
 Copying is unlimited on every tier (`PlanController::copy`), so `useCopyPlan`'s 429 →
-`PlanLimitModal` branch is unreachable. Still unreachable after #24, which narrowed
-`useCopyPlan` to the two preview screens but didn't touch the 429 branch.
+`PlanLimitModal` branch was unreachable, as was the mirrored branch in `SharedPlanScreen`.
+Both removed; copy failures now surface as a plain error alert (`SharedPlanScreen`
+previously swallowed non-429 errors entirely, showing nothing). `PlanLimitModal` is now
+generation-allowance-only, so its `title` and `onUpgrade` props are required and the
+"Plan limit reached" default and "Got it" single-button branch are gone — both remaining
+callers already passed their own.
 
-- `src/hooks/useCopyPlan.ts`
-- Effort: **XS**
+- `src/hooks/useCopyPlan.ts`, `src/screens/SharedPlanScreen.tsx`,
+  `src/components/PlanLimitModal.tsx`
 
 ### `FeaturedPlanScreen` and `SharedPlanScreen` overlap
 Both are read-only plan previews with an add button. They differ in data source (plan id vs.

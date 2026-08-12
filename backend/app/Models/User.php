@@ -114,11 +114,6 @@ class User extends Authenticatable implements MustVerifyEmail
             ->value('timezone') ?? 'UTC';
     }
 
-    public function deviceAttestations(): HasMany
-    {
-        return $this->hasMany(DeviceAttestation::class, 'claimed_by_user_id');
-    }
-
     public function hasActiveSubscription(): bool
     {
         if ($this->subscription_tier === null || $this->subscription_tier === 'free') {

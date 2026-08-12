@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -15,9 +15,9 @@ interface EmptyStateProps {
   // pattern); set false to sit inline within a list header/footer instead.
   fullScreen?: boolean;
   /**
-   * The way out of the empty state. Worth passing wherever one exists: an
-   * empty screen that only describes the emptiness leaves the user to find the
-   * fix themselves, which previously meant spotting the floating FAB.
+   * The way out of the empty state. Worth passing wherever one exists: a
+   * screen that only describes the emptiness leaves the user to find the fix
+   * themselves, which means spotting the floating FAB.
    */
   actionLabel?: string;
   onAction?: () => void;
